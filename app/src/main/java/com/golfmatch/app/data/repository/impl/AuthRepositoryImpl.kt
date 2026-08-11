@@ -44,9 +44,9 @@ class AuthRepositoryImpl @Inject constructor(
             purpose = purpose.name,
             introduction = introduction
         )
-    ).toDomain().also { sessionManager.updateToken(it.accessToken) }
+    ).toDomain().also { sessionManager.updateSession(it.accessToken, it.userId) }
 
     override suspend fun login(phoneNumber: String, otpCode: String): AuthSession =
         api.login(LoginRequestDto(phoneNumber, otpCode)).toDomain()
-            .also { sessionManager.updateToken(it.accessToken) }
+            .also { sessionManager.updateSession(it.accessToken, it.userId) }
 }
