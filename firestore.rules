@@ -1,0 +1,16 @@
+rules_version = '2';
+
+// Firestoreセキュリティルールの方針（技術設計書12-7章）
+//
+// Androidクライアントは業務データについてFirestoreへ直接アクセスせず、常にCloud Functions
+// （Admin SDK、セキュリティルールをバイパスする信頼された実行コンテキスト）経由でアクセスする
+// （技術設計書12-0章 前提2）。そのため、認可ロジック（is_admin判定・本人確認等）をルール側に
+// 持たせる必要はなく、全コレクションを一律拒否する単純な構成とする。認可判定はすべて
+// functions/src/middleware（authenticate, requireAdmin）に一元化する。
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -12,9 +12,11 @@
 
 ## 現在の状態
 
-本リポジトリは「プロジェクト雛形・共通基盤」フェーズの成果物である。各画面のCompose UI実装、
-Repositoryの実接続処理（Firestore/Cloud Functions呼び出しの本実装）、サーバーサイド（Cloud Functions）実装は
-次フェーズで行う。ナビゲーションは配線確認用のプレースホルダー画面で暫定動作する。
+Androidクライアント側は4コア画面＋認証フロー画面のUI〜データ層実装が完了している。
+サーバーサイド（`functions/`, Cloud Functions for Firebase）はPhase1（認証基盤・エリアマスタ・
+ユーザープロフィール・ラウンド募集）を実装済み。Phase2（おすすめユーザー・マッチング申請・掲示板）、
+Phase3（メッセージ・通報・ブロック・通報管理）は未実装（技術設計書13章）。セットアップ・Emulatorでの
+動作確認方法は `functions/README.md` を参照。
 
 ## 技術スタック
 

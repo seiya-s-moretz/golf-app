@@ -24,3 +24,13 @@ app/google-services.json
 *.log
 /app/build/
 /app/release/
+
+# Cloud Functions (サーバーサイド)
+functions/node_modules/
+functions/lib/
+functions/.env
+.firebase/
+firebase-debug.log
+firebase-debug.*.log
+firestore-debug.log
+ui-debug.log
