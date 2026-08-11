@@ -13,18 +13,19 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import com.golfmatch.app.ui.container.HomeContainer
 
 /**
  * アプリ全体のナビゲーショングラフ（技術設計書 3章）。
  *
- * 各画面のCompose UI実装（Screen/Container/ViewModel）は次フェーズで行うため、
- * 現時点ではRouteの配線確認用にプレースホルダー画面を割り当てている。
+ * ホーム画面（`HomeContainer`）以外の各画面のCompose UI実装（Screen/Container/ViewModel）は
+ * 次フェーズで行うため、引き続きRouteの配線確認用にプレースホルダー画面を割り当てている。
  * 実装時は各 composable ブロックを対応する `XxxContainer` に置き換える。
  */
 @Composable
 fun NavGraph(navController: NavHostController) {
     NavHost(navController = navController, startDestination = Route.Home.route) {
-        composable(Route.Home.route) { PlaceholderScreen("Home") }
+        composable(Route.Home.route) { HomeContainer(navController = navController) }
         composable(Route.Recommend.route) { PlaceholderScreen("Recommend") }
         composable(Route.Board.route) { PlaceholderScreen("Board") }
         composable(Route.MyPage.route) { PlaceholderScreen("MyPage") }
