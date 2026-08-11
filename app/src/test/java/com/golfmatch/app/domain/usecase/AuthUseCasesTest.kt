@@ -1,9 +1,11 @@
 package com.golfmatch.app.domain.usecase
 
+import com.golfmatch.app.domain.model.PhoneOtpVerificationResult
 import com.golfmatch.app.domain.model.Purpose
 import com.golfmatch.app.testutil.FakeAuthRepository
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -25,14 +27,15 @@ class AuthUseCasesTest {
     }
 
     @Test
-    fun `VerifyPhoneOtpUseCaseはphoneNumberとotpCodeをそのまま渡しRegistrationTokenを返す`() = runBlocking {
+    fun `VerifyPhoneOtpUseCaseはphoneNumberとotpCodeをそのまま渡しPhoneOtpVerificationResultを返す(ADR-0006)`() = runBlocking {
         val repo = FakeAuthRepository()
         val useCase = VerifyPhoneOtpUseCase(repo)
 
         val result = useCase("+819012345678", "123456")
 
         assertEquals("+819012345678" to "123456", repo.lastVerifyArgs)
-        assertEquals("reg-token-1", result.value)
+        assertTrue(result is PhoneOtpVerificationResult.NewUser)
+        assertEquals("reg-token-1", (result as PhoneOtpVerificationResult.NewUser).registrationToken.value)
     }
 
     @Test

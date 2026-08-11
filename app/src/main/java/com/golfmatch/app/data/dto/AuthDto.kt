@@ -13,9 +13,18 @@ data class VerifyOtpRequestDto(
     @SerializedName("otp_code") val otpCode: String
 )
 
-/** `POST /auth/phone/verify` レスポンス */
+/**
+ * `POST /auth/phone/verify` レスポンス（技術設計書6-1章、ADR-0006）。
+ *
+ * `is_new_user` がクライアントの分岐に用いる唯一の確定的な判定材料（ADR-0006の原則）。
+ * `is_new_user=false`（既存ユーザー）の場合のみ `session` が非null、
+ * `is_new_user=true`（新規ユーザー）の場合のみ `registration_token` が非null となる。
+ * 他フィールドの有無による暗黙の分岐は行わない。
+ */
 data class VerifyOtpResponseDto(
-    @SerializedName("registration_token") val registrationToken: String
+    @SerializedName("is_new_user") val isNewUser: Boolean,
+    @SerializedName("session") val session: AuthSessionResponseDto?,
+    @SerializedName("registration_token") val registrationToken: String?
 )
 
 /** `POST /users`（新規登録）リクエストボディ */
@@ -30,16 +39,10 @@ data class RegisterUserRequestDto(
     @SerializedName("introduction") val introduction: String
 )
 
-/** `POST /auth/login` リクエストボディ */
-data class LoginRequestDto(
-    @SerializedName("phone_number") val phoneNumber: String,
-    @SerializedName("otp_code") val otpCode: String
-)
-
 /**
- * `POST /users`, `POST /auth/login` レスポンス（アカウント作成/ログイン結果）。
+ * `POST /users`, `POST /auth/phone/verify`（既存ユーザー分岐） レスポンス（アカウント作成/認証結果）。
  *
- * `user` は業務上、いずれのエンドポイントの成功レスポンスにも常に含まれる（技術設計書6-1章、ADR-0005）。
+ * `user` は業務上、いずれのレスポンスにも常に含まれる（技術設計書6-1章、ADR-0005）。
  * 型が nullable なのはJSONパース時の防御的措置に過ぎず、業務上 `user` が null であることは
  * サーバー側の契約違反を意味する異常系である（`AuthMapper.toDomain()` は null の場合に例外を送出する）。
  */

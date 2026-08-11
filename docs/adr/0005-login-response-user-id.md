@@ -1,7 +1,7 @@
 # ADR-0005: `POST /auth/login` レスポンスに `User` を含める
 
 ## ステータス
-承認
+承認（ただし本ADRが対象とした `POST /auth/login` エンドポイント自体は、ADR-0006により `POST /auth/phone/verify` に統合され廃止された。本ADRが定めた「レスポンスに`User`を含める」「暗黙のnullフォールバックを禁止する」という原則は、統合後の `POST /auth/phone/verify` の既存ユーザー分岐にそのまま引き継がれており、本ADRの決定内容自体は無効化しない）
 
 ## コンテキスト
 TesterAgentによる検証（`docs/test-plan.md` 4-1章）で、以下の不整合が発見された。
@@ -51,4 +51,5 @@ TesterAgentによる検証（`docs/test-plan.md` 4-1章）で、以下の不整�
 ## 関連
 - `docs/技術設計書.md` 6-1章
 - `docs/adr/0003-auth-and-phone-verification.md`
+- `docs/adr/0006-verify-otp-new-vs-existing-user.md` — `POST /auth/login`を`POST /auth/phone/verify`に統合し廃止した後継の判断
 - `docs/test-plan.md` 4-1章（TesterAgentによる問題発見の経緯）

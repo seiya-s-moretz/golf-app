@@ -2,14 +2,13 @@ package com.golfmatch.app.data.repository.impl
 
 import com.golfmatch.app.data.api.ApiService
 import com.golfmatch.app.data.auth.AuthSessionManager
-import com.golfmatch.app.data.dto.LoginRequestDto
 import com.golfmatch.app.data.dto.RegisterUserRequestDto
 import com.golfmatch.app.data.dto.RequestOtpRequestDto
 import com.golfmatch.app.data.dto.VerifyOtpRequestDto
 import com.golfmatch.app.data.mapper.toDomain
 import com.golfmatch.app.domain.model.AuthSession
+import com.golfmatch.app.domain.model.PhoneOtpVerificationResult
 import com.golfmatch.app.domain.model.Purpose
-import com.golfmatch.app.domain.model.RegistrationToken
 import com.golfmatch.app.domain.repository.AuthRepository
 import javax.inject.Inject
 
@@ -21,8 +20,12 @@ class AuthRepositoryImpl @Inject constructor(
     override suspend fun requestPhoneOtp(phoneNumber: String) =
         api.requestPhoneOtp(RequestOtpRequestDto(phoneNumber))
 
-    override suspend fun verifyPhoneOtp(phoneNumber: String, otpCode: String): RegistrationToken =
-        api.verifyPhoneOtp(VerifyOtpRequestDto(phoneNumber, otpCode)).toDomain()
+    override suspend fun verifyPhoneOtp(phoneNumber: String, otpCode: String): PhoneOtpVerificationResult =
+        api.verifyPhoneOtp(VerifyOtpRequestDto(phoneNumber, otpCode)).toDomain().also { result ->
+            if (result is PhoneOtpVerificationResult.ExistingUser) {
+                sessionManager.updateSession(result.session.accessToken, result.session.userId)
+            }
+        }
 
     override suspend fun registerUser(
         registrationToken: String,
@@ -45,8 +48,4 @@ class AuthRepositoryImpl @Inject constructor(
             introduction = introduction
         )
     ).toDomain().also { sessionManager.updateSession(it.accessToken, it.userId) }
-
-    override suspend fun login(phoneNumber: String, otpCode: String): AuthSession =
-        api.login(LoginRequestDto(phoneNumber, otpCode)).toDomain()
-            .also { sessionManager.updateSession(it.accessToken, it.userId) }
 }

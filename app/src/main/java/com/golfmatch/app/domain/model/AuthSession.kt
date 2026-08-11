@@ -18,3 +18,15 @@ data class AuthSession(
 data class RegistrationToken(
     val value: String
 )
+
+/**
+ * `POST /auth/phone/verify` の検証結果（技術設計書6-1章、ADR-0006）。
+ *
+ * OTP検証成功後、新規/既存ユーザーいずれかの結果を確定的に表す。
+ * [ExistingUser]の場合は認証（セッション開始）まで完了しており、[NewUser]の場合は
+ * `POST /users` による本登録に進む必要がある。
+ */
+sealed interface PhoneOtpVerificationResult {
+    data class ExistingUser(val session: AuthSession) : PhoneOtpVerificationResult
+    data class NewUser(val registrationToken: RegistrationToken) : PhoneOtpVerificationResult
+}

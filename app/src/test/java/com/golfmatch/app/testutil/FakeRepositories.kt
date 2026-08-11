@@ -6,6 +6,7 @@ import com.golfmatch.app.domain.model.BoardPost
 import com.golfmatch.app.domain.model.Conversation
 import com.golfmatch.app.domain.model.MatchRequest
 import com.golfmatch.app.domain.model.Message
+import com.golfmatch.app.domain.model.PhoneOtpVerificationResult
 import com.golfmatch.app.domain.model.Purpose
 import com.golfmatch.app.domain.model.RegistrationToken
 import com.golfmatch.app.domain.model.Report
@@ -219,7 +220,8 @@ class FakeAreaRepository(
 }
 
 class FakeAuthRepository(
-    private val registrationToken: RegistrationToken = RegistrationToken("reg-token-1"),
+    private val verifyResult: PhoneOtpVerificationResult =
+        PhoneOtpVerificationResult.NewUser(RegistrationToken("reg-token-1")),
     private val authSession: AuthSession = AuthSession(accessToken = "access-token-1", userId = "user-1")
 ) : AuthRepository {
     var lastOtpPhoneNumber: String? = null
@@ -228,16 +230,14 @@ class FakeAuthRepository(
         private set
     var lastRegisterArgs: List<Any?>? = null
         private set
-    var lastLoginArgs: Pair<String, String>? = null
-        private set
 
     override suspend fun requestPhoneOtp(phoneNumber: String) {
         lastOtpPhoneNumber = phoneNumber
     }
 
-    override suspend fun verifyPhoneOtp(phoneNumber: String, otpCode: String): RegistrationToken {
+    override suspend fun verifyPhoneOtp(phoneNumber: String, otpCode: String): PhoneOtpVerificationResult {
         lastVerifyArgs = phoneNumber to otpCode
-        return registrationToken
+        return verifyResult
     }
 
     override suspend fun registerUser(
@@ -251,11 +251,6 @@ class FakeAuthRepository(
         introduction: String
     ): AuthSession {
         lastRegisterArgs = listOf(registrationToken, name, gender, age, areaId, averageScore, purpose, introduction)
-        return authSession
-    }
-
-    override suspend fun login(phoneNumber: String, otpCode: String): AuthSession {
-        lastLoginArgs = phoneNumber to otpCode
         return authSession
     }
 }

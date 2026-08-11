@@ -39,3 +39,4 @@ PRD3-1章・6章で「SMS等による簡易本人確認」がMust要件として
 ## 関連
 - `docs/技術設計書.md` 2章、5-2章（PhoneVerification）、6-1章（API）、10章#7
 - `docs/adr/0005-login-response-user-id.md` — `POST /auth/login`のレスポンスに`User`を含める判断（本ADR策定時の6-1章の記述漏れの是正）
+- `docs/adr/0006-verify-otp-new-vs-existing-user.md` — `POST /auth/phone/verify`に新規/既存ユーザー判別を統合し`POST /auth/login`を廃止した判断（本ADRで定めた3段階フローのうち「検証」と「ログイン」を1エンドポイントに統合。`POST /auth/phone/otp`→`POST /auth/phone/verify`→（新規のみ）`POST /users`という段階構成自体は維持）

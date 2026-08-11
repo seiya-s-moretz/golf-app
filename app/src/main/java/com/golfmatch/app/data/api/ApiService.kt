@@ -6,7 +6,6 @@ import com.golfmatch.app.data.dto.BoardPostDto
 import com.golfmatch.app.data.dto.ConversationDto
 import com.golfmatch.app.data.dto.CreateBoardPostRequestDto
 import com.golfmatch.app.data.dto.CreateRoundEventRequestDto
-import com.golfmatch.app.data.dto.LoginRequestDto
 import com.golfmatch.app.data.dto.MatchRequestDto
 import com.golfmatch.app.data.dto.MessageDto
 import com.golfmatch.app.data.dto.RegisterUserRequestDto
@@ -40,18 +39,17 @@ interface ApiService {
     @POST("auth/phone/otp")
     suspend fun requestPhoneOtp(@Body body: RequestOtpRequestDto)
 
+    /**
+     * OTP検証と新規/既存ユーザーの判定・認証完了までを1回で行う（技術設計書6-1章、ADR-0006）。
+     * 新規/既存で内容の異なる[VerifyOtpResponseDto]を返す。`is_new_user=false`（既存ユーザー）の場合は
+     * `session`にアクセストークンとユーザー情報が含まれ認証が完了する（旧`POST /auth/login`はこれに統合され廃止された）。
+     * `is_new_user=true`（新規ユーザー）の場合は`registration_token`が含まれ、`POST /users`による本登録に進む。
+     */
     @POST("auth/phone/verify")
     suspend fun verifyPhoneOtp(@Body body: VerifyOtpRequestDto): VerifyOtpResponseDto
 
     @POST("users")
     suspend fun registerUser(@Body body: RegisterUserRequestDto): AuthSessionResponseDto
-
-    /**
-     * 既存ユーザーの再ログイン。レスポンスには認証成功したユーザー本人の `user` が
-     * `POST /users` と同一形式で含まれる（技術設計書6-1章、ADR-0005）。
-     */
-    @POST("auth/login")
-    suspend fun login(@Body body: LoginRequestDto): AuthSessionResponseDto
 
     // 6-2. エリアマスタ
     @GET("areas")
