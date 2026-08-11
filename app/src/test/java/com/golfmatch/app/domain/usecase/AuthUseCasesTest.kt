@@ -1,5 +1,6 @@
 package com.golfmatch.app.domain.usecase
 
+import com.golfmatch.app.domain.model.AuthSession
 import com.golfmatch.app.domain.model.PhoneOtpVerificationResult
 import com.golfmatch.app.domain.model.Purpose
 import com.golfmatch.app.testutil.FakeAuthRepository
@@ -36,6 +37,21 @@ class AuthUseCasesTest {
         assertEquals("+819012345678" to "123456", repo.lastVerifyArgs)
         assertTrue(result is PhoneOtpVerificationResult.NewUser)
         assertEquals("reg-token-1", (result as PhoneOtpVerificationResult.NewUser).registrationToken.value)
+    }
+
+    @Test
+    fun `VerifyPhoneOtpUseCaseは既存ユーザーの場合ExistingUserをそのまま返す(ADR-0006)`() = runBlocking {
+        val existingSession = AuthSession(accessToken = "access-token-existing", userId = "user-existing")
+        val repo = FakeAuthRepository(
+            verifyResult = PhoneOtpVerificationResult.ExistingUser(existingSession)
+        )
+        val useCase = VerifyPhoneOtpUseCase(repo)
+
+        val result = useCase("+819012345678", "123456")
+
+        assertEquals("+819012345678" to "123456", repo.lastVerifyArgs)
+        assertTrue(result is PhoneOtpVerificationResult.ExistingUser)
+        assertEquals(existingSession, (result as PhoneOtpVerificationResult.ExistingUser).session)
     }
 
     @Test

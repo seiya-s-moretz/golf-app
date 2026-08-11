@@ -1,15 +1,18 @@
 # テスト計画：ゴルフマッチングアプリ（雛形・共通基盤フェーズ）
 
 作成日: 2026-08-11
+更新日: 2026-08-12（ADR-0006対応検証を反映）
 作成者: TesterAgent
-対象: DeveloperAgent「プロジェクト雛形・共通基盤」フェーズ成果物
+対象: DeveloperAgent「プロジェクト雛形・共通基盤」フェーズ成果物、および認証フロー画面（電話番号入力〜OTP認証〜プロフィール初期登録）実装（ADR-0006対応、コミット7f1b9c7）
 参照元: `docs/要件定義書.md`（PRD）, `docs/技術設計書.md`（技術設計）, `docs/adr/` 配下ADR, `README.md`
 
 ---
 
 ## 0. テスト対象範囲
 
-現時点では画面UI（Compose Screen/Container/ViewModel）は未実装（次フェーズ）のため、UIテストは対象外とする。
+現時点では画面UI（Compose Screen/Container）の大部分は未実装（次フェーズ）のため、UIテスト（Compose UIテスト・Android計測テスト）は引き続き対象外とする。
+ただし2026-08-12更新分として、認証フロー（電話番号入力〜OTP認証〜プロフィール初期登録）の`ViewModel`層・`domain/usecase`・`data/mapper`はJVMユニットテストの対象に含める（詳細は2-5章）。
+
 本フェーズで実装済みの以下をテスト対象とする。
 
 - ビルドの健全性（`:app:assembleDebug`）
@@ -78,7 +81,7 @@ ID型はUUID型指定に対し全て`String`実装（README記載の意図的な
 | U-4 | SendMatchRequestUseCase / RespondMatchRequestUseCase | 委譲、および承認/却下の分岐ロジック |
 | U-5 | GetConversationsUseCase / GetMessagesUseCase / SendMessageUseCase | 委譲。`GetMessagesUseCase`のデフォルト引数（`before=null`, `limit=50`）の確認 |
 | U-6 | BlockUserUseCase / UnblockUserUseCase | 委譲 |
-| U-7 | RequestPhoneOtpUseCase / VerifyPhoneOtpUseCase / RegisterUserUseCase | 委譲 |
+| U-7 | RequestPhoneOtpUseCase / VerifyPhoneOtpUseCase / RegisterUserUseCase | 委譲。`VerifyPhoneOtpUseCase`は`PhoneOtpVerificationResult`（`ExistingUser`/`NewUser`両ケース）をそのまま返すことを確認（ADR-0006、2-5章参照） |
 | U-8 | GetAreasUseCase / PostBoardMessageUseCase / SubmitReportUseCase | 委譲 |
 
 テストコード: `app/src/test/java/com/golfmatch/app/domain/usecase/*.kt`（Fakeリポジトリを用いた委譲検証、`testutil/FakeRepositories.kt`）
@@ -95,24 +98,89 @@ ID型はUUID型指定に対し全て`String`実装（README記載の意図的な
 | M-7 | ConversationMapper | ネストしたUser/Message変換、`lastMessage=null`（未メッセージ会話）の変換 |
 | M-8 | ReportMapper | 5種の`reasonCategory`、`reasonText`のnull許容、`BOARD_POST`対象の変換 |
 | M-9 | AreaMapper | `isActive=false`（将来エリアの先行登録想定）の変換 |
-| M-10 | AuthMapper | `VerifyOtpResponseDto`→`RegistrationToken`、`AuthSessionResponseDto`→`AuthSession`（下記4章のバグ報告参照） |
+| M-10 | AuthMapper | `VerifyOtpResponseDto`→`PhoneOtpVerificationResult`（ADR-0006、`is_new_user`分岐、2-5章参照）、`AuthSessionResponseDto`→`AuthSession`（`user`必須・null時例外送出、ADR-0005） |
 
 テストコード: `app/src/test/java/com/golfmatch/app/data/mapper/*.kt`
 
 ---
 
+## 2-5. 認証フロー（電話番号入力〜OTP認証〜プロフィール初期登録、ADR-0006対応）
+
+コミット7f1b9c7「fix: OTP検証に新規/既存ユーザー判定を統合しauth/loginを廃止(ADR-0006)」により、`POST /auth/login`が廃止され`POST /auth/phone/verify`に`is_new_user`フラグが統合された。これに伴うクライアント実装をADR-0006「実装への影響」表（55〜65行目）と1件ずつ照合した。
+
+### 2-5-1. ADR-0006「実装への影響」表との照合結果
+
+| # | 対象ファイル | 照合結果 |
+|---|---|---|
+| A-1 | `AuthDto.kt` | 一致。`VerifyOtpResponseDto`が`isNewUser: Boolean`, `session: AuthSessionResponseDto?`, `registrationToken: String?`（nullable化）を持つ。`LoginRequestDto`は削除済み |
+| A-2 | `ApiService.kt` | 一致。`@POST("auth/login")`の`login()`メソッドは削除済み。`verifyPhoneOtp()`のKDocが新規/既存ユーザーで内容の異なるレスポンスを返す旨を明記 |
+| A-3 | `AuthSession.kt` | 一致。`sealed interface PhoneOtpVerificationResult`が追加され、`ExistingUser(session: AuthSession)`/`NewUser(registrationToken: RegistrationToken)`の2ケース |
+| A-4 | `AuthRepository.kt` | 一致。`login()`は削除済み。`verifyPhoneOtp()`の戻り値型が`PhoneOtpVerificationResult`に変更 |
+| A-5 | `VerifyPhoneOtpUseCase.kt` | 一致。戻り値型が`PhoneOtpVerificationResult` |
+| A-6 | `LoginUseCase.kt` | 一致。ファイル自体が削除済み（`app/src/main/java/com/golfmatch/app/domain/usecase/LoginUseCase.kt`は存在しない） |
+| A-7 | `AuthRepositoryImpl.kt` | 一致。`login()`実装は削除済み。`verifyPhoneOtp()`内で`isNewUser`により分岐し、`ExistingUser`側でのみ`sessionManager.updateSession(...)`を呼ぶ |
+| A-8 | `AuthMapper.kt` | 一致。`VerifyOtpResponseDto.toDomain(): PhoneOtpVerificationResult`が`isNewUser`で確定的に分岐。`false`側では既存の`AuthSessionResponseDto.toDomain()`（`user`必須・null時`checkNotNull`で例外送出、ADR-0005の原則を引き継ぎ）をそのまま再利用している |
+| A-9 | `OtpVerificationViewModel.kt` | 一致。`loginUseCase`への依存（コンストラクタ引数）は完全に削除され、`verifyPhoneOtpUseCase`の呼び出し1回のみに統合。try-catchベースの暫定分岐（旧KDocの「## 要確認事項」）は解消され記述も削除済み。`when(result)`で`ExistingUser`→`loginSuccess=true`、`NewUser`→`registrationToken`セットの分岐が実装されている |
+| A-10 | `OtpVerificationUiState` | 一致。構造変更なし（`loginSuccess`・`registrationToken`の2フィールドで両分岐を表現） |
+
+ADR-0006「実装への影響」表とコード変更の間に不整合は見つからなかった。`docs/技術設計書.md`6-1章（`POST /auth/phone/verify`のレスポンス定義、`POST /auth/login`廃止の記載）ともADR-0006と整合している。
+
+### 2-5-2. テストケース
+
+| # | 対象 | 検証内容 | 結果 |
+|---|---|---|---|
+| AUTH-1 | AuthMapper | `is_new_user=true`かつ`registration_token`ありで`NewUser`に変換される | OK |
+| AUTH-2 | AuthMapper | `is_new_user=true`かつ`registration_token=null`（契約違反）で例外送出 | OK |
+| AUTH-3 | AuthMapper | `is_new_user=false`かつ`session`ありで`ExistingUser`に変換される（内部で`user`必須の`AuthSessionResponseDto.toDomain()`を再利用） | OK |
+| AUTH-4 | AuthMapper | `is_new_user=false`かつ`session=null`（契約違反）で例外送出 | OK |
+| AUTH-5 | AuthMapper | `POST /users`相当（`user`あり）のレスポンス変換 | OK |
+| AUTH-6 | AuthMapper | `AuthSessionResponseDto`の`user=null`（契約違反、ADR-0005の原則を`verify`既存ユーザー分岐にも適用）で例外送出 | OK |
+| AUTH-7 | VerifyPhoneOtpUseCase | 引数(`phoneNumber`, `otpCode`)をそのまま委譲し`NewUser`を返す | OK |
+| AUTH-8 | VerifyPhoneOtpUseCase | 引数をそのまま委譲し`ExistingUser`を返す（既存テストが`NewUser`ケースのみだったため、本更新でTesterAgentが追加） | OK |
+| AUTH-9 | RequestPhoneOtpUseCase / RegisterUserUseCase | 委譲確認（既存踏襲） | OK |
+
+テストコード: `app/src/test/java/com/golfmatch/app/data/mapper/AuthMapperTest.kt`, `app/src/test/java/com/golfmatch/app/domain/usecase/AuthUseCasesTest.kt`, `app/src/test/java/com/golfmatch/app/testutil/FakeRepositories.kt`（`FakeAuthRepository`が`PhoneOtpVerificationResult`を差し替え可能に更新されている）
+
+### 2-5-3. カバレッジ上の観察（バグではない、参考）
+
+- `OtpVerificationViewModel`（および電話番号入力・プロフィール初期登録の各ViewModel）に対するユニットテストは本更新時点で存在しない（`app/src/test/java/com/golfmatch/app/ui/viewmodel/`配下に該当ファイルなし）。ADR-0006の分岐（`ExistingUser`→`loginSuccess=true`、`NewUser`→`registrationToken`セット）はコードレビューでは`AuthMapperTest`/`AuthUseCasesTest`の分岐と整合していることを確認したが、ViewModelの`StateFlow`遷移自体を検証するテストは未整備。UI層のテスト方針（0章）が定まった段階でDeveloperAgent/TesterAgent間で追加を検討されたい（バグではないため差し戻し必須ではない）
+- `AuthRepositoryImpl.verifyPhoneOtp()`は`ExistingUser`時のみ`sessionManager.updateSession(...)`を呼ぶという分岐ロジックを含むが、`data/repository/impl`配下は本テスト計画0章で「ApiServiceへの薄い委譲のみ」を理由にテスト対象外としてきた経緯があり、本更新でも同方針を踏襲し対象外のままとした。ただし本メソッドは単純な委譲を超えた条件分岐を含み始めているため、次フェーズで`ApiService`のFake/Mock整備とあわせてテスト対象化を検討する余地がある（参考情報として記録、差し戻し事項ではない）
+
+---
+
 ## 3. テスト実行結果サマリ
 
+### 3-1. 2026-08-11実施分（雛形・共通基盤フェーズ）
 - 実行コマンド: `./gradlew :app:assembleDebug` / `./gradlew :app:testDebugUnitTest`
 - ビルド: 成功
 - ユニットテスト: 62件実行、成功62件、失敗0件、エラー0件
 - テストファイル数: 18ファイル（domain/model 2、data/mapper 9、domain/usecase 6、testutil（Fixture/Fake）2）
 
+### 3-2. 2026-08-12実施分（ADR-0006対応、コミット7f1b9c7検証）
+- 実行コマンド: `./gradlew :app:assembleDebug` / `./gradlew :app:testDebugUnitTest`
+- ビルド: 成功（`BUILD SUCCESSFUL`、警告なし）
+- ユニットテスト: 66件実行、成功66件、失敗0件、エラー0件
+  - 内訳の変化: `AuthMapperTest`が4件→6件（ADR-0006の`is_new_user`分岐4ケース追加、旧ログインレスポンス相当のテスト名を整理）、`AuthUseCasesTest`が3件のまま（`VerifyPhoneOtpUseCase`の`ExistingUser`分岐テストをTesterAgentが1件追加した一方、内容が更新されたテストと統合された結果件数据え置き）
+  - 上記件数はTesterAgentが2-5-2章AUTH-8のテストケースを追加した後の数値（追加前は65件、追加分含め全件成功）
+- リグレッション: 認証以外の既存テスト（domain/model, domain/usecase の他UseCase, data/mapper の他Mapper）はいずれも変更なく全件成功しており、リグレッションは確認されなかった
+
 ---
 
 ## 4. 発見した不整合・バグ報告（DeveloperAgentへの差し戻し事項）
 
-### 4-1. 【要確認】ログイン成功時にAuthSession.userIdが空文字列になる
+### 4-1. 【解消済み】ログイン成功時にAuthSession.userIdが空文字列になる
+
+**2026-08-12更新: 本件はADR-0005（暗黙フォールバック廃止・例外送出への変更）およびADR-0006（`POST /auth/login`廃止・`POST /auth/phone/verify`への統合）により解消されたことをコードで確認した。**
+
+- 確認内容:
+  - `POST /auth/login`エンドポイント自体が廃止され（`ApiService.kt`に`login()`メソッドは存在しない）、本項が指摘していた「ログインレスポンスに`user`が含まれない」という設計上の非対称性の発生源そのものが無くなった
+  - 後継の`POST /auth/phone/verify`（既存ユーザー分岐）は、`AuthSessionResponseDto`（`user`必須）を再利用しており、`AuthMapper.kt`の`AuthSessionResponseDto.toDomain()`は`user`が`null`の場合に`checkNotNull`で例外を送出する実装になっている（空文字列への暗黙フォールバックは行われない）
+  - `AuthMapperTest.kt`の`userを含まないレスポンスをtoDomainすると例外がスローされる(ADR-0005)`テストで、`IllegalStateException`が送出されることを確認済み（テスト実行結果: OK）
+  - `VerifyOtpResponseDto.toDomain()`（`is_new_user`による分岐）についても、`is_new_user=false`かつ`session=null`という契約違反のケースで例外が送出されることを`AuthMapperTest.kt`で確認済み（2-5-2章AUTH-4）
+- 結論: 「ログインできたのに自分が誰か分からない」状態（`userId`が空文字列のままサイレントに後続処理へ伝播する）は、コード上再現しないことを確認した。案A（レスポンスに`user`を含める）・案C一部（暗黙フォールバック廃止）の組み合わせという当初のADR-0005の決定が、ADR-0006によるエンドポイント統合後も一貫して維持されている。
+
+<details>
+<summary>以下、2026-08-11時点の原報告（記録として残す）</summary>
 
 - 対象コード: `app/src/main/java/com/golfmatch/app/data/mapper/AuthMapper.kt`
   ```kotlin
@@ -133,8 +201,11 @@ ID型はUUID型指定に対し全て`String`実装（README記載の意図的な
   - 案A: `POST /auth/login`のレスポンスにも`user`（または`user_id`）を含めるよう技術設計書6-1章を見直す（ArchitectAgent確認要）
   - 案B: レスポンスに`user`が含まれない場合は、`AuthRepositoryImpl.login()`内で`AuthSessionResponseDto`受領後に`GET /users/me`相当のAPIを追加で呼び出し`userId`を解決する
   - 案C: 空文字列への暗黙フォールバックをやめ、`user`が必須でない設計であれば`AuthSession.userId`自体をnullable化するか、取得できなかった場合に明示的な例外を投げる
-  - このテストケースは `app/src/test/java/com/golfmatch/app/data/mapper/AuthMapperTest.kt` の
-    `ログインレスポンス相当(userなし)ではuserIdが空文字列にフォールバックする` に再現コードとして残してある（Pass/Failで判定するものではなく、現状挙動を明文化する目的）。
+  - このテストケースは当時 `app/src/test/java/com/golfmatch/app/data/mapper/AuthMapperTest.kt` の
+    `ログインレスポンス相当(userなし)ではuserIdが空文字列にフォールバックする` に再現コードとして残していた（Pass/Failで判定するものではなく、現状挙動を明文化する目的）。
+  - **2026-08-12注記**: 上記テストケースはADR-0005・ADR-0006対応により、期待動作が「例外送出」に変わったことに伴い`userを含まないレスポンスをtoDomainすると例外がスローされる(ADR-0005)`へ更新済み（DeveloperAgent側の対応、コミット履歴上はADR-0005対応時点および本ADR-0006対応時点の2回にわたり更新されている）。
+
+</details>
 
 ### 4-2. 【軽微・参考】BlockDtoが未使用
 
@@ -142,8 +213,16 @@ ID型はUUID型指定に対し全て`String`実装（README記載の意図的な
 - 技術設計書6-3章のブロック関連API（`POST /users/{id}/block`, `DELETE /users/{id}/block`, `GET /users/me/blocks`）は、`ApiService`上では`GET /users/me/blocks`が`List<UserDto>`を返す実装になっており（`BlockedUsersUiState.blockedUsers: List<User>`と整合させるための妥当な選択）、`BlockDto`はどこからも参照されていない（対応する`BlockMapper`も存在しない）。
 - 動作上の不具合ではなくデッドコードの指摘のみ。ブロック関連の管理API（例:ブロック日時を含む一覧等）を将来追加する場合の設計メモとして残すか、不要であれば削除を検討されたい。バグではないため差し戻し必須ではない。
 
+### 4-3. 【軽微・参考】認証フロー画面のViewModelテスト・Repository実装層テストが未整備（2026-08-12追加、バグではない）
+
+- ADR-0006対応の検証にあたり不整合・バグは見つからなかったが、2-5-3章で記載のとおり以下2点はテストカバレッジ上の観察事項として記録する。差し戻し必須ではないが、次フェーズでの検討を推奨する。
+  1. `OtpVerificationViewModel`をはじめとする認証フロー画面のViewModelに対するユニットテストが未整備（`app/src/test/java/com/golfmatch/app/ui/viewmodel/`配下にテストファイルが存在しない）。UIテスト方針そのものが未確定（0章）であることが背景にあるため、UIテスト方針確定時にArchitectAgent/DeveloperAgent/TesterAgentで対象化を協議されたい
+  2. `AuthRepositoryImpl.verifyPhoneOtp()`が`is_new_user`による条件分岐（`ExistingUser`時のみ`sessionManager.updateSession`を呼ぶ）を含むようになり、他Repository実装同様の「ApiServiceへの薄い委譲のみ」という前提（0章）から一部逸脱し始めている。`ApiService`のFake/Mock整備とあわせて、`data/repository/impl`配下のテスト対象化を次フェーズで検討する余地がある
+
 ---
 
 ## 5. 結論
 
-現時点でテスト可能な範囲（domain/model, domain/usecase, data/mapper）について、技術設計書5章のデータモデル定義との齟齬は見つからなかった。UseCase層はいずれもRepositoryへの薄い委譲であり、レコメンドスコアリング等の主要ビジネスロジックはサーバー側実装待ちのためテスト対象外とした。1件、ログイン成功後の`userId`欠落につながりうる実装上の懸念点（4-1）を発見したため、DeveloperAgent/ArchitectAgentへの確認を推奨する。
+現時点でテスト可能な範囲（domain/model, domain/usecase, data/mapper）について、技術設計書5章のデータモデル定義との齟齬は見つからなかった。UseCase層はいずれもRepositoryへの薄い委譲であり、レコメンドスコアリング等の主要ビジネスロジックはサーバー側実装待ちのためテスト対象外とした。
+
+**2026-08-12追記（ADR-0006対応検証）**: コミット7f1b9c7（OTP検証への新規/既存ユーザー判定統合・`POST /auth/login`廃止）について、`./gradlew :app:assembleDebug`・`./gradlew :app:testDebugUnitTest`はいずれも成功（66件成功、0失敗）した。ADR-0006「実装への影響」表（55〜65行目）とコード変更（`AuthDto.kt`, `ApiService.kt`, `AuthSession.kt`, `AuthRepository.kt`, `VerifyPhoneOtpUseCase.kt`, `LoginUseCase.kt`削除, `AuthRepositoryImpl.kt`, `AuthMapper.kt`, `OtpVerificationViewModel.kt`）を1件ずつ照合し、不一致は見つからなかった。`docs/技術設計書.md`6-1章・11-2章もADR-0006と整合している。4-1章で報告していた「ログイン成功時にAuthSession.userIdが空文字列になる」バグは、`POST /auth/login`廃止と暗黙フォールバック廃止（ADR-0005の原則の引き継ぎ）により解消されたことをテストで確認し「解消済み」に更新した。新規のクリティカルなバグは発見しなかったが、`VerifyPhoneOtpUseCase`の`ExistingUser`分岐テストが欠落していたため追加した（2-5-2章AUTH-8）。また、認証フロー画面のViewModelテスト・Repository実装層テストの未整備を軽微な参考事項として記録した（4-3章）。
