@@ -36,7 +36,13 @@ data class LoginRequestDto(
     @SerializedName("otp_code") val otpCode: String
 )
 
-/** `POST /users`, `POST /auth/login` レスポンス（アカウント作成/ログイン結果） */
+/**
+ * `POST /users`, `POST /auth/login` レスポンス（アカウント作成/ログイン結果）。
+ *
+ * `user` は業務上、いずれのエンドポイントの成功レスポンスにも常に含まれる（技術設計書6-1章、ADR-0005）。
+ * 型が nullable なのはJSONパース時の防御的措置に過ぎず、業務上 `user` が null であることは
+ * サーバー側の契約違反を意味する異常系である（`AuthMapper.toDomain()` は null の場合に例外を送出する）。
+ */
 data class AuthSessionResponseDto(
     @SerializedName("user") val user: UserDto?,
     @SerializedName("access_token") val accessToken: String

@@ -38,3 +38,4 @@ PRD3-1章・6章で「SMS等による簡易本人確認」がMust要件として
 
 ## 関連
 - `docs/技術設計書.md` 2章、5-2章（PhoneVerification）、6-1章（API）、10章#7
+- `docs/adr/0005-login-response-user-id.md` — `POST /auth/login`のレスポンスに`User`を含める判断（本ADR策定時の6-1章の記述漏れの是正）

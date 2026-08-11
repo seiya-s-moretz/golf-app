@@ -46,6 +46,10 @@ interface ApiService {
     @POST("users")
     suspend fun registerUser(@Body body: RegisterUserRequestDto): AuthSessionResponseDto
 
+    /**
+     * 既存ユーザーの再ログイン。レスポンスには認証成功したユーザー本人の `user` が
+     * `POST /users` と同一形式で含まれる（技術設計書6-1章、ADR-0005）。
+     */
     @POST("auth/login")
     suspend fun login(@Body body: LoginRequestDto): AuthSessionResponseDto
 
