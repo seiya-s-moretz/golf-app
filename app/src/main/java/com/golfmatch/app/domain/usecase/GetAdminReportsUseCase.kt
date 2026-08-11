@@ -12,6 +12,9 @@ import javax.inject.Inject
 class GetAdminReportsUseCase @Inject constructor(
     private val reportRepository: ReportRepository
 ) {
-    suspend operator fun invoke(statusFilter: ReportStatus? = null): List<ReportSummary> =
-        reportRepository.getAdminReports(statusFilter)
+    suspend operator fun invoke(
+        statusFilter: ReportStatus? = null,
+        before: String? = null,
+        limit: Int = 50
+    ): List<ReportSummary> = reportRepository.getAdminReports(statusFilter, before, limit)
 }

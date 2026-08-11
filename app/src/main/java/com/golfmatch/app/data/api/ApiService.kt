@@ -152,7 +152,11 @@ interface ApiService {
 
     // 6-9. 通報管理（簡易管理画面、管理者向け。`is_admin=true`のみ許可、falseはサーバー側で403。ADR-0007）
     @GET("admin/reports")
-    suspend fun getAdminReports(@Query("status") status: String?): List<ReportAdminSummaryDto>
+    suspend fun getAdminReports(
+        @Query("status") status: String?,
+        @Query("before") before: String?,
+        @Query("limit") limit: Int
+    ): List<ReportAdminSummaryDto>
 
     @GET("admin/reports/{id}")
     suspend fun getAdminReportDetail(@Path("id") reportId: String): ReportAdminDetailDto

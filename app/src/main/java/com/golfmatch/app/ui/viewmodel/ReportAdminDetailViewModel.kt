@@ -86,6 +86,7 @@ class ReportAdminDetailViewModel @Inject constructor(
 
     fun save() {
         val state = _uiState.value
+        if (state.isUpdating) return
         viewModelScope.launch {
             _uiState.value = state.copy(isUpdating = true, errorMessage = null, updateSuccess = false)
             runCatching {

@@ -31,8 +31,8 @@ class ReportRepositoryImpl @Inject constructor(
         )
     ).toDomain()
 
-    override suspend fun getAdminReports(statusFilter: ReportStatus?): List<ReportSummary> =
-        api.getAdminReports(statusFilter?.name).map { it.toDomain() }
+    override suspend fun getAdminReports(statusFilter: ReportStatus?, before: String?, limit: Int): List<ReportSummary> =
+        api.getAdminReports(statusFilter?.name, before, limit).map { it.toDomain() }
 
     override suspend fun getAdminReportDetail(reportId: String): ReportDetail =
         api.getAdminReportDetail(reportId).toDomain()
