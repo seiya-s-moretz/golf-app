@@ -1,7 +1,7 @@
 # ADR-0003: 認証基盤の新設とSMS OTPによる簡易本人確認方式の採用
 
 ## ステータス
-承認・確定（2026-08-12、プロダクトオーナー確認によりSMS送信ベンダーをTwilioに確定。技術設計書10章#7参照）
+承認・確定（2026-08-12、プロダクトオーナー確認によりSMS送信ベンダーをTwilioに確定。技術設計書10章#7参照）。トークンの具体的な実装形式について本ADRが留保していた決定は、2026-08-12付ADR-0008（不透明トークン＋Firestoreセッションストアを採用）により解消済み
 
 ## コンテキスト
 既存技術設計（`D:\勉強\golf` 配下資料）には、ユーザー登録・ログイン・認証トークンに関する定義が一切存在しない。`ApiService.kt` にも認証ヘッダーの概念がなく、`GET /users/{id}` 等のAPIも認証なしで呼べる前提になっている。
@@ -18,7 +18,7 @@ PRD（`docs/要件定義書.md` 3-1章）は「SMS等による本人確認（ア
 
 ### 認証方式: Bearer トークン
 - アカウント作成後に発行される `access_token` を `Authorization: Bearer <token>` ヘッダーで送信する、ステートレスなトークン認証を採用する。
-- トークンの具体的な実装形式（JWT／不透明トークン+サーバー側セッションストア等）・有効期限・リフレッシュ方式は、サーバーサイド技術選定（TypeScript(Node.js) + Cloud Functions for Firebase、Firestore。技術設計書10章#6、確定）を踏まえDeveloperAgent着手時に決定する。本ADRでは「クライアントがBearerトークンを保持し全APIリクエストに付与する」というインターフェース契約のみを定める。
+- トークンの具体的な実装形式（JWT／不透明トークン+サーバー側セッションストア等）・有効期限・リフレッシュ方式は、サーバーサイド技術選定（TypeScript(Node.js) + Cloud Functions for Firebase、Firestore。技術設計書10章#6、確定）を踏まえDeveloperAgent着手時に決定するとしていたが、サーバー実装設計（技術設計書12章）に伴いADR-0008で「不透明トークン（`crypto.randomBytes`）＋Firestore `sessions`コレクションによるセッションストア、有効期限90日、明示的リフレッシュなし」に確定した。本ADRでは「クライアントがBearerトークンを保持し全APIリクエストに付与する」というインターフェース契約のみを定める（この契約自体はADR-0008でも変更されていない）。
 - 技術設計書10章#4・6-9章・ADR-0007のとおり、通報管理（簡易管理画面）向けの管理者認可もこの同じBearerトークン基盤を流用する（`User.is_admin`フラグによる追加検証のみ）。別建ての管理者認証基盤は設けない。
 
 ### SMS送信ベンダー: Twilio（**確定**、2026-08-12プロダクトオーナー確認）
@@ -49,3 +49,4 @@ PRD3-1章・6章で「SMS等による簡易本人確認」がMust要件として
 - `docs/adr/0005-login-response-user-id.md` — `POST /auth/login`のレスポンスに`User`を含める判断（本ADR策定時の6-1章の記述漏れの是正）
 - `docs/adr/0006-verify-otp-new-vs-existing-user.md` — `POST /auth/phone/verify`に新規/既存ユーザー判別を統合し`POST /auth/login`を廃止した判断（本ADRで定めた3段階フローのうち「検証」と「ログイン」を1エンドポイントに統合。`POST /auth/phone/otp`→`POST /auth/phone/verify`→（新規のみ）`POST /users`という段階構成自体は維持）
 - `docs/adr/0007-report-admin-panel.md` — 通報管理（簡易管理画面）の管理者認可に本ADRのBearerトークン基盤+`is_admin`フラグを流用する判断
+- `docs/adr/0008-server-implementation-design.md` — 本ADRが留保していたBearerトークンの具体的な実装形式（不透明トークン＋Firestoreセッションストア）、およびSMS送信（Twilio）の抽象化方針・サーバーディレクトリ構成を決定
