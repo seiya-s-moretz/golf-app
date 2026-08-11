@@ -53,4 +53,13 @@ class UserUseCasesTest {
         assertEquals("user-2", repo.lastUnblockedUserId)
         assertEquals(1, repo.unblockCallCount)
     }
+
+    @Test
+    fun `GetBlockedUsersUseCaseはRepositoryの結果をそのまま返す`() = runBlocking {
+        val blocked = listOf(TestFixtures.user(userId = "user-9"))
+        val repo = FakeUserRepository(blockedUsers = blocked)
+        val useCase = GetBlockedUsersUseCase(repo)
+
+        assertEquals(blocked, useCase())
+    }
 }

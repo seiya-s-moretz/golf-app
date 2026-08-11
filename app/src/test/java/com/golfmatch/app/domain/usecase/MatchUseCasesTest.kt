@@ -1,5 +1,6 @@
 package com.golfmatch.app.domain.usecase
 
+import com.golfmatch.app.domain.repository.MatchRequestDirection
 import com.golfmatch.app.testutil.FakeMatchRepository
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -46,5 +47,26 @@ class MatchUseCasesTest {
 
         assertEquals("match-req-1", repo.lastRejectedId)
         assertNull(repo.lastApprovedId)
+    }
+
+    @Test
+    fun `GetMatchRequestsUseCaseはdirection=RECEIVEDをそのままRepositoryへ渡す`() = runBlocking {
+        val repo = FakeMatchRepository()
+        val useCase = GetMatchRequestsUseCase(repo)
+
+        val result = useCase(MatchRequestDirection.RECEIVED)
+
+        assertEquals(MatchRequestDirection.RECEIVED, repo.lastRequestedDirection)
+        assertEquals(1, result.size)
+    }
+
+    @Test
+    fun `GetMatchRequestsUseCaseはdirection=SENTをそのままRepositoryへ渡す`() = runBlocking {
+        val repo = FakeMatchRepository()
+        val useCase = GetMatchRequestsUseCase(repo)
+
+        useCase(MatchRequestDirection.SENT)
+
+        assertEquals(MatchRequestDirection.SENT, repo.lastRequestedDirection)
     }
 }

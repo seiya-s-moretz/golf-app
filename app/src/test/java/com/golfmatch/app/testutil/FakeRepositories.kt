@@ -80,6 +80,8 @@ class FakeUserRepository(
 
 class FakeRoundRepository(
     private val roundEvents: List<RoundEvent> = emptyList(),
+    /** nullの場合はデフォルトの[TestFixtures.roundEvent]を返す。主催者判定テスト等でcreatedByを差し替えたい場合に指定する */
+    private val roundEventResult: RoundEvent? = null,
     private val applyJoinResult: RoundJoinRequest = TestFixtures.roundJoinRequest(),
     private val approveResult: RoundJoinRequest = TestFixtures.roundJoinRequest(),
     private val rejectResult: RoundJoinRequest = TestFixtures.roundJoinRequest()
@@ -90,10 +92,15 @@ class FakeRoundRepository(
         private set
     var rejectCallArgs: Pair<String, String>? = null
         private set
+    var getRoundEventCallCount = 0
+        private set
 
     override suspend fun getRoundEvents(): List<RoundEvent> = roundEvents
 
-    override suspend fun getRoundEvent(eventId: String): RoundEvent = TestFixtures.roundEvent(eventId = eventId)
+    override suspend fun getRoundEvent(eventId: String): RoundEvent {
+        getRoundEventCallCount++
+        return (roundEventResult ?: TestFixtures.roundEvent(eventId = eventId)).copy(eventId = eventId)
+    }
 
     override suspend fun createRoundEvent(
         clubName: String,
@@ -224,7 +231,7 @@ class FakeReportRepository(
         return TestFixtures.report(targetType = targetType, reasonCategory = reasonCategory, reasonText = reasonText)
     }
 
-    override suspend fun getAdminReports(statusFilter: ReportStatus?): List<ReportSummary> {
+    override suspend fun getAdminReports(statusFilter: ReportStatus?, before: String?, limit: Int): List<ReportSummary> {
         lastAdminReportsStatusFilter = statusFilter
         return adminReports
     }

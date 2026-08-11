@@ -25,7 +25,8 @@ class UserMapperTest {
         purpose: String = "CASUAL",
         phoneVerified: Boolean = true,
         phoneVerifiedAt: String? = "2026-02-01T00:00:00Z",
-        status: String = "ACTIVE"
+        status: String = "ACTIVE",
+        isAdmin: Boolean = false
     ) = UserDto(
         userId = "user-1",
         name = "山田太郎",
@@ -40,6 +41,7 @@ class UserMapperTest {
         phoneVerified = phoneVerified,
         phoneVerifiedAt = phoneVerifiedAt,
         status = status,
+        isAdmin = isAdmin,
         createdAt = "2026-01-15T12:00:00Z"
     )
 
@@ -60,7 +62,20 @@ class UserMapperTest {
         assertEquals(true, domain.phoneVerified)
         assertEquals(Instant.parse("2026-02-01T00:00:00Z"), domain.phoneVerifiedAt)
         assertEquals(AccountStatus.ACTIVE, domain.status)
+        assertEquals(false, domain.isAdmin)
         assertEquals(Instant.parse("2026-01-15T12:00:00Z"), domain.createdAt)
+    }
+
+    @Test
+    fun `is_adminがtrueの場合はisAdmin=trueに変換される(ADR-0007 通報管理画面の権限判定)`() {
+        val domain = userDto(isAdmin = true).toDomain()
+        assertEquals(true, domain.isAdmin)
+    }
+
+    @Test
+    fun `is_adminがfalseの場合はisAdmin=falseに変換される`() {
+        val domain = userDto(isAdmin = false).toDomain()
+        assertEquals(false, domain.isAdmin)
     }
 
     @Test

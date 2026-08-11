@@ -65,4 +65,25 @@ class RoundUseCasesTest {
         assertEquals(8000, result.fee)
         assertEquals(4, result.capacity)
     }
+
+    @Test
+    fun `GetRoundEventUseCaseはeventIdをそのままRepositoryへ渡す`() = runBlocking {
+        val repo = FakeRoundRepository()
+        val useCase = GetRoundEventUseCase(repo)
+
+        val result = useCase("event-9")
+
+        assertEquals("event-9", result.eventId)
+    }
+
+    @Test
+    fun `GetRoundJoinRequestsUseCaseはeventIdをそのままRepositoryへ渡す(ADR-0001 主催者向け申請一覧)`() = runBlocking {
+        val repo = FakeRoundRepository()
+        val useCase = GetRoundJoinRequestsUseCase(repo)
+
+        val result = useCase("event-9")
+
+        assertEquals(1, result.size)
+        assertEquals("event-9", result[0].eventId)
+    }
 }
