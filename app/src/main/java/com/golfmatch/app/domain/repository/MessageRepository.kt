@@ -1,0 +1,22 @@
+package com.golfmatch.app.domain.repository
+
+import com.golfmatch.app.domain.model.Conversation
+import com.golfmatch.app.domain.model.Message
+
+/**
+ * メッセージのリポジトリ（技術設計書 6-7章、ADR-0004）
+ */
+interface MessageRepository {
+    suspend fun getConversations(): List<Conversation>
+
+    /**
+     * [partnerId] とのメッセージ履歴取得。Connectionが存在しない場合はサーバー側で403となる。
+     * [before] はページネーションカーソル（nullの場合は最新から取得）。
+     */
+    suspend fun getMessages(partnerId: String, before: String?, limit: Int): List<Message>
+
+    /** Connectionが存在しない、またはブロック関係にある場合はサーバー側で拒否される */
+    suspend fun sendMessage(partnerId: String, content: String): Message
+
+    suspend fun markAsRead(partnerId: String)
+}
