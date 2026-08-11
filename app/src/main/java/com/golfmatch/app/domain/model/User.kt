@@ -21,6 +21,7 @@ data class User(
     val phoneVerified: Boolean,
     val phoneVerifiedAt: Instant?,
     val status: AccountStatus,
+    val isAdmin: Boolean = false,
     val createdAt: Instant
 )
 

@@ -10,14 +10,24 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
@@ -34,6 +44,12 @@ import kotlinx.datetime.Instant
  * 表示項目: アイコン・名前・アベレージスコア・住居エリア・目的。
  * アイコン画像（[User.iconUrl]）の実際の読み込みは画像ローディングライブラリ未導入のため次フェーズとし、
  * 現時点ではプレースホルダーアイコンを表示する（既存の`RoundEventCard`同様、画像表示は未実装のまま踏襲）。
+ *
+ * 右上の「…」オーバーフローメニューから通報・ブロック導線（技術設計書7-3章）を提供する。ブロックは
+ * `AlertDialog`による確認後に[onBlockUser]を呼び出す（実際の`BlockUserUseCase`呼び出しは呼び出し側
+ * ViewModelの責務。UI層はビジネスロジックを持たない、技術設計書2章）。
+ * 設計書4章では通報導線用の共通部品`ReportMenuItem.kt`を新設する想定だが、本カードのみの利用のため
+ * 過剰な共通化を避けDropdownMenu/AlertDialogを直接組み込んだ（DeveloperAgent実装判断）。
  */
 @Composable
 fun UserCard(
@@ -41,7 +57,9 @@ fun UserCard(
     areaName: String,
     isRequested: Boolean,
     modifier: Modifier = Modifier,
-    onSendMatchRequest: () -> Unit = {}
+    onSendMatchRequest: () -> Unit = {},
+    onReportClick: () -> Unit = {},
+    onBlockUser: () -> Unit = {}
 ) {
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -76,7 +94,58 @@ fun UserCard(
             Button(onClick = onSendMatchRequest, enabled = !isRequested) {
                 Text(text = if (isRequested) "申請済み" else "申請する")
             }
+
+            UserOverflowMenu(onReportClick = onReportClick, onBlockUser = onBlockUser)
         }
+    }
+}
+
+@Composable
+private fun UserOverflowMenu(onReportClick: () -> Unit, onBlockUser: () -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    var showBlockConfirm by remember { mutableStateOf(false) }
+
+    Box {
+        IconButton(onClick = { expanded = true }) {
+            Icon(imageVector = Icons.Filled.MoreVert, contentDescription = "メニュー")
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenuItem(
+                text = { Text("通報する") },
+                onClick = {
+                    expanded = false
+                    onReportClick()
+                }
+            )
+            DropdownMenuItem(
+                text = { Text("このユーザーをブロックする") },
+                onClick = {
+                    expanded = false
+                    showBlockConfirm = true
+                }
+            )
+        }
+    }
+
+    if (showBlockConfirm) {
+        AlertDialog(
+            onDismissRequest = { showBlockConfirm = false },
+            title = { Text("ユーザーをブロックしますか？") },
+            text = { Text("ブロックすると、おすすめユーザー・掲示板への表示や申請・メッセージの送受信ができなくなります。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showBlockConfirm = false
+                    onBlockUser()
+                }) {
+                    Text("ブロックする")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBlockConfirm = false }) {
+                    Text("キャンセル")
+                }
+            }
+        )
     }
 }
 

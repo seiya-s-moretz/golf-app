@@ -9,12 +9,15 @@ import com.golfmatch.app.data.dto.CreateRoundEventRequestDto
 import com.golfmatch.app.data.dto.MatchRequestDto
 import com.golfmatch.app.data.dto.MessageDto
 import com.golfmatch.app.data.dto.RegisterUserRequestDto
+import com.golfmatch.app.data.dto.ReportAdminDetailDto
+import com.golfmatch.app.data.dto.ReportAdminSummaryDto
 import com.golfmatch.app.data.dto.RequestOtpRequestDto
 import com.golfmatch.app.data.dto.RoundEventDto
 import com.golfmatch.app.data.dto.RoundJoinRequestDto
 import com.golfmatch.app.data.dto.SendMessageRequestDto
 import com.golfmatch.app.data.dto.SubmitReportRequestDto
 import com.golfmatch.app.data.dto.ReportDto
+import com.golfmatch.app.data.dto.UpdateReportStatusRequestDto
 import com.golfmatch.app.data.dto.UpdateUserRequestDto
 import com.golfmatch.app.data.dto.UserDto
 import com.golfmatch.app.data.dto.VerifyOtpRequestDto
@@ -22,6 +25,7 @@ import com.golfmatch.app.data.dto.VerifyOtpResponseDto
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
+import retrofit2.http.PATCH
 import retrofit2.http.POST
 import retrofit2.http.Path
 import retrofit2.http.PUT
@@ -145,4 +149,17 @@ interface ApiService {
     // 6-8. 通報・ブロック
     @POST("reports")
     suspend fun submitReport(@Body body: SubmitReportRequestDto): ReportDto
+
+    // 6-9. 通報管理（簡易管理画面、管理者向け。`is_admin=true`のみ許可、falseはサーバー側で403。ADR-0007）
+    @GET("admin/reports")
+    suspend fun getAdminReports(@Query("status") status: String?): List<ReportAdminSummaryDto>
+
+    @GET("admin/reports/{id}")
+    suspend fun getAdminReportDetail(@Path("id") reportId: String): ReportAdminDetailDto
+
+    @PATCH("admin/reports/{id}/status")
+    suspend fun updateReportStatus(
+        @Path("id") reportId: String,
+        @Body body: UpdateReportStatusRequestDto
+    ): ReportAdminDetailDto
 }

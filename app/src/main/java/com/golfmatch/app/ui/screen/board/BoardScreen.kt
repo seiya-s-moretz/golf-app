@@ -31,7 +31,8 @@ import kotlinx.datetime.Instant
 @Composable
 fun BoardScreen(
     uiState: BoardUiState,
-    onCreatePostClick: () -> Unit = {}
+    onCreatePostClick: () -> Unit = {},
+    onReportPost: (BoardPost) -> Unit = {}
 ) {
     Scaffold(
         floatingActionButton = {
@@ -44,7 +45,7 @@ fun BoardScreen(
             uiState.isLoading -> LoadingContent(innerPadding)
             uiState.errorMessage != null -> ErrorContent(innerPadding, uiState.errorMessage)
             uiState.posts.isEmpty() -> EmptyContent(innerPadding)
-            else -> BoardPostList(innerPadding, uiState)
+            else -> BoardPostList(innerPadding, uiState, onReportPost)
         }
     }
 }
@@ -80,7 +81,7 @@ private fun EmptyContent(padding: PaddingValues) {
 }
 
 @Composable
-private fun BoardPostList(padding: PaddingValues, uiState: BoardUiState) {
+private fun BoardPostList(padding: PaddingValues, uiState: BoardUiState, onReportPost: (BoardPost) -> Unit) {
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(padding),
         contentPadding = PaddingValues(16.dp)
@@ -89,7 +90,8 @@ private fun BoardPostList(padding: PaddingValues, uiState: BoardUiState) {
             BoardPostCard(
                 post = post,
                 authorName = uiState.authors[post.userId]?.name.orEmpty(),
-                modifier = Modifier.padding(bottom = 12.dp)
+                modifier = Modifier.padding(bottom = 12.dp),
+                onReportClick = { onReportPost(post) }
             )
         }
     }

@@ -10,7 +10,10 @@ import com.golfmatch.app.domain.model.PhoneOtpVerificationResult
 import com.golfmatch.app.domain.model.Purpose
 import com.golfmatch.app.domain.model.RegistrationToken
 import com.golfmatch.app.domain.model.Report
+import com.golfmatch.app.domain.model.ReportDetail
 import com.golfmatch.app.domain.model.ReportReasonCategory
+import com.golfmatch.app.domain.model.ReportStatus
+import com.golfmatch.app.domain.model.ReportSummary
 import com.golfmatch.app.domain.model.ReportTargetType
 import com.golfmatch.app.domain.model.RoundEvent
 import com.golfmatch.app.domain.model.RoundJoinRequest
@@ -198,8 +201,17 @@ class FakeMessageRepository(
     }
 }
 
-class FakeReportRepository : ReportRepository {
+class FakeReportRepository(
+    private val adminReports: List<ReportSummary> = emptyList(),
+    private val adminReportDetail: ReportDetail = TestFixtures.reportDetail()
+) : ReportRepository {
     var lastSubmitArgs: List<Any?>? = null
+        private set
+    var lastAdminReportsStatusFilter: ReportStatus? = null
+        private set
+    var lastAdminReportDetailId: String? = null
+        private set
+    var lastUpdateStatusArgs: Triple<String, ReportStatus, String?>? = null
         private set
 
     override suspend fun submitReport(
@@ -210,6 +222,21 @@ class FakeReportRepository : ReportRepository {
     ): Report {
         lastSubmitArgs = listOf(targetType, targetId, reasonCategory, reasonText)
         return TestFixtures.report(targetType = targetType, reasonCategory = reasonCategory, reasonText = reasonText)
+    }
+
+    override suspend fun getAdminReports(statusFilter: ReportStatus?): List<ReportSummary> {
+        lastAdminReportsStatusFilter = statusFilter
+        return adminReports
+    }
+
+    override suspend fun getAdminReportDetail(reportId: String): ReportDetail {
+        lastAdminReportDetailId = reportId
+        return adminReportDetail
+    }
+
+    override suspend fun updateReportStatus(reportId: String, status: ReportStatus, handlingMemo: String?): ReportDetail {
+        lastUpdateStatusArgs = Triple(reportId, status, handlingMemo)
+        return adminReportDetail
     }
 }
 

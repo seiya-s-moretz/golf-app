@@ -3,6 +3,7 @@ package com.golfmatch.app.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.golfmatch.app.domain.model.User
+import com.golfmatch.app.domain.usecase.BlockUserUseCase
 import com.golfmatch.app.domain.usecase.GetAreasUseCase
 import com.golfmatch.app.domain.usecase.GetRecommendUsersUseCase
 import com.golfmatch.app.domain.usecase.SendMatchRequestUseCase
@@ -31,7 +32,8 @@ data class RecommendUiState(
 class RecommendViewModel @Inject constructor(
     private val getRecommendUsersUseCase: GetRecommendUsersUseCase,
     private val getAreasUseCase: GetAreasUseCase,
-    private val sendMatchRequestUseCase: SendMatchRequestUseCase
+    private val sendMatchRequestUseCase: SendMatchRequestUseCase,
+    private val blockUserUseCase: BlockUserUseCase
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(RecommendUiState())
@@ -71,6 +73,27 @@ class RecommendViewModel @Inject constructor(
                 .onFailure { error ->
                     _uiState.value = _uiState.value.copy(
                         errorMessage = error.message ?: "マッチング申請の送信に失敗しました"
+                    )
+                }
+        }
+    }
+
+    /**
+     * ユーザーブロック（技術設計書7-3章、[UserCard][com.golfmatch.app.ui.component.UserCard]の
+     * 確認ダイアログから呼び出される）。ブロック成功後は一覧から即時除外する（サーバー側の
+     * `GET /users/recommend`除外仕様、技術設計書6-5章を先取りしたUX上の即時反映）。
+     */
+    fun blockUser(user: User) {
+        viewModelScope.launch {
+            runCatching { blockUserUseCase(user.userId) }
+                .onSuccess {
+                    _uiState.value = _uiState.value.copy(
+                        users = _uiState.value.users.filterNot { it.userId == user.userId }
+                    )
+                }
+                .onFailure { error ->
+                    _uiState.value = _uiState.value.copy(
+                        errorMessage = error.message ?: "ブロックに失敗しました"
                     )
                 }
         }

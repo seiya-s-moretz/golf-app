@@ -1,13 +1,16 @@
 package com.golfmatch.app.ui.screen.recommend
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -25,26 +28,42 @@ import kotlinx.datetime.Instant
 
 /**
  * おすすめユーザー画面（技術設計書3-1章、`D:\勉強\golf\基本設計書.md` 3-2章）。
+ *
+ * 自分宛のマッチング申請一覧画面（[Route.MatchRequestList][com.golfmatch.app.ui.navigation.Route.MatchRequestList]、
+ * 技術設計書3-2章）への導線をこの画面から提供する。
  */
 @Composable
 fun RecommendScreen(
     uiState: RecommendUiState,
-    onSendMatchRequest: (User) -> Unit = {}
+    onSendMatchRequest: (User) -> Unit = {},
+    onViewMatchRequestsClick: () -> Unit = {},
+    onReportUser: (User) -> Unit = {},
+    onBlockUser: (User) -> Unit = {}
 ) {
     Scaffold { innerPadding ->
-        when {
-            uiState.isLoading -> LoadingContent(innerPadding)
-            uiState.errorMessage != null -> ErrorContent(innerPadding, uiState.errorMessage)
-            uiState.users.isEmpty() -> EmptyContent(innerPadding)
-            else -> UserList(innerPadding, uiState, onSendMatchRequest)
+        Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+            OutlinedButton(
+                onClick = onViewMatchRequestsClick,
+                modifier = Modifier.fillMaxWidth().padding(16.dp)
+            ) {
+                Text("受信したマッチング申請を見る")
+            }
+            Box(modifier = Modifier.weight(1f)) {
+                when {
+                    uiState.isLoading -> LoadingContent()
+                    uiState.errorMessage != null -> ErrorContent(uiState.errorMessage)
+                    uiState.users.isEmpty() -> EmptyContent()
+                    else -> UserList(uiState, onSendMatchRequest, onReportUser, onBlockUser)
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun LoadingContent(padding: PaddingValues) {
+private fun LoadingContent() {
     Box(
-        modifier = Modifier.fillMaxSize().padding(padding),
+        modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
         CircularProgressIndicator()
@@ -52,9 +71,9 @@ private fun LoadingContent(padding: PaddingValues) {
 }
 
 @Composable
-private fun ErrorContent(padding: PaddingValues, message: String) {
+private fun ErrorContent(message: String) {
     Box(
-        modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
+        modifier = Modifier.fillMaxSize().padding(16.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(text = message, style = MaterialTheme.typography.bodyLarge)
@@ -62,9 +81,9 @@ private fun ErrorContent(padding: PaddingValues, message: String) {
 }
 
 @Composable
-private fun EmptyContent(padding: PaddingValues) {
+private fun EmptyContent() {
     Box(
-        modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
+        modifier = Modifier.fillMaxSize().padding(16.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(text = "現在おすすめできるユーザーはいません", style = MaterialTheme.typography.bodyLarge)
@@ -73,12 +92,13 @@ private fun EmptyContent(padding: PaddingValues) {
 
 @Composable
 private fun UserList(
-    padding: PaddingValues,
     uiState: RecommendUiState,
-    onSendMatchRequest: (User) -> Unit
+    onSendMatchRequest: (User) -> Unit,
+    onReportUser: (User) -> Unit,
+    onBlockUser: (User) -> Unit
 ) {
     LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(padding),
+        modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp)
     ) {
         items(uiState.users, key = { it.userId }) { user ->
@@ -87,7 +107,9 @@ private fun UserList(
                 areaName = uiState.areaNames[user.areaId].orEmpty(),
                 isRequested = user.userId in uiState.sentRequestUserIds,
                 modifier = Modifier.padding(bottom = 12.dp),
-                onSendMatchRequest = { onSendMatchRequest(user) }
+                onSendMatchRequest = { onSendMatchRequest(user) },
+                onReportClick = { onReportUser(user) },
+                onBlockUser = { onBlockUser(user) }
             )
         }
     }

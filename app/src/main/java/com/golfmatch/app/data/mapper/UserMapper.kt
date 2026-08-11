@@ -20,5 +20,6 @@ fun UserDto.toDomain(): User = User(
     phoneVerified = phoneVerified,
     phoneVerifiedAt = phoneVerifiedAt?.let { Instant.parse(it) },
     status = AccountStatus.valueOf(status),
+    isAdmin = isAdmin,
     createdAt = Instant.parse(createdAt)
 )

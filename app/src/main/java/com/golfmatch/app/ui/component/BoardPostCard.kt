@@ -8,15 +8,24 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
@@ -33,12 +42,17 @@ import kotlinx.datetime.toLocalDateTime
  * 表示項目: 投稿者アイコン・名前・ラウンド結果（投稿内容）・投稿日時。
  * [authorName] は[BoardPost]自体には含まれない（`userId`のみ保持）ため、呼び出し側（`BoardViewModel`）が
  * `GetUserUseCase`で解決した結果を渡す（実装メモ参照）。未解決の場合は空文字列。
+ *
+ * 右上の「…」オーバーフローメニューから通報導線（技術設計書7-3章 `ReportMenuItem`相当）を提供する。
+ * 設計書4章では通報導線用の共通部品`ReportMenuItem.kt`を新設する想定だが、本カードのみの利用のため
+ * 過剰な共通化を避けDropdownMenuを直接組み込んだ（DeveloperAgent実装判断）。
  */
 @Composable
 fun BoardPostCard(
     post: BoardPost,
     authorName: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onReportClick: () -> Unit = {}
 ) {
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -61,8 +75,29 @@ fun BoardPostCard(
                     )
                     Text(text = formatDateTime(post.createdAt), style = MaterialTheme.typography.bodySmall)
                 }
+                Spacer(modifier = Modifier.weight(1f))
+                PostOverflowMenu(onReportClick = onReportClick)
             }
             Text(text = post.content, style = MaterialTheme.typography.bodyMedium)
+        }
+    }
+}
+
+@Composable
+private fun PostOverflowMenu(onReportClick: () -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { expanded = true }) {
+            Icon(imageVector = Icons.Filled.MoreVert, contentDescription = "メニュー")
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenuItem(
+                text = { Text("通報する") },
+                onClick = {
+                    expanded = false
+                    onReportClick()
+                }
+            )
         }
     }
 }

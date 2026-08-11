@@ -2,9 +2,13 @@ package com.golfmatch.app.data.repository.impl
 
 import com.golfmatch.app.data.api.ApiService
 import com.golfmatch.app.data.dto.SubmitReportRequestDto
+import com.golfmatch.app.data.dto.UpdateReportStatusRequestDto
 import com.golfmatch.app.data.mapper.toDomain
 import com.golfmatch.app.domain.model.Report
+import com.golfmatch.app.domain.model.ReportDetail
 import com.golfmatch.app.domain.model.ReportReasonCategory
+import com.golfmatch.app.domain.model.ReportStatus
+import com.golfmatch.app.domain.model.ReportSummary
 import com.golfmatch.app.domain.model.ReportTargetType
 import com.golfmatch.app.domain.repository.ReportRepository
 import javax.inject.Inject
@@ -25,5 +29,20 @@ class ReportRepositoryImpl @Inject constructor(
             reasonCategory = reasonCategory.name,
             reasonText = reasonText
         )
+    ).toDomain()
+
+    override suspend fun getAdminReports(statusFilter: ReportStatus?): List<ReportSummary> =
+        api.getAdminReports(statusFilter?.name).map { it.toDomain() }
+
+    override suspend fun getAdminReportDetail(reportId: String): ReportDetail =
+        api.getAdminReportDetail(reportId).toDomain()
+
+    override suspend fun updateReportStatus(
+        reportId: String,
+        status: ReportStatus,
+        handlingMemo: String?
+    ): ReportDetail = api.updateReportStatus(
+        reportId,
+        UpdateReportStatusRequestDto(status = status.name, handlingMemo = handlingMemo)
     ).toDomain()
 }

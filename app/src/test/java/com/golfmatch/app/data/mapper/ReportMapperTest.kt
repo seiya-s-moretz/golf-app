@@ -21,7 +21,9 @@ class ReportMapperTest {
             reasonText = null,
             status = "PENDING",
             createdAt = "2026-08-01T00:00:00Z",
-            reviewedAt = null
+            handledByUserId = null,
+            handledAt = null,
+            handlingMemo = null
         )
 
         val domain = dto.toDomain()
@@ -30,7 +32,7 @@ class ReportMapperTest {
         assertEquals(ReportReasonCategory.SPAM, domain.reasonCategory)
         assertNull(domain.reasonText)
         assertEquals(ReportStatus.PENDING, domain.status)
-        assertNull(domain.reviewedAt)
+        assertNull(domain.handledAt)
     }
 
     @Test
@@ -44,7 +46,9 @@ class ReportMapperTest {
             reasonText = null,
             status = "PENDING",
             createdAt = "2026-08-01T00:00:00Z",
-            reviewedAt = null
+            handledByUserId = null,
+            handledAt = null,
+            handlingMemo = null
         )
 
         val domain = dto.toDomain()
@@ -62,14 +66,16 @@ class ReportMapperTest {
             targetId = "user-2",
             reasonCategory = "OTHER",
             reasonText = "自由記述の理由",
-            status = "REVIEWED",
+            status = "REVIEWING",
             createdAt = "2026-08-01T00:00:00Z",
-            reviewedAt = "2026-08-02T00:00:00Z"
+            handledByUserId = null,
+            handledAt = "2026-08-02T00:00:00Z",
+            handlingMemo = null
         )
 
         val domain = dto.toDomain()
 
         assertEquals("自由記述の理由", domain.reasonText)
-        assertEquals(ReportStatus.REVIEWED, domain.status)
+        assertEquals(ReportStatus.REVIEWING, domain.status)
     }
 }

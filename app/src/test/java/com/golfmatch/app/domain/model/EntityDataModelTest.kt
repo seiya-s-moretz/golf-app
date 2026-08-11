@@ -61,11 +61,11 @@ class EntityDataModelTest {
         )
     }
 
-    // ---- ReportStatus: 技術設計書5-2章 PENDING/REVIEWED/ACTION_TAKEN/DISMISSED ----
+    // ---- ReportStatus: 技術設計書5-2章 PENDING/REVIEWING/RESOLVED/DISMISSED（ADR-0007で改称） ----
     @Test
     fun `ReportStatus は設計書どおり4値`() {
         assertEquals(
-            setOf("PENDING", "REVIEWED", "ACTION_TAKEN", "DISMISSED"),
+            setOf("PENDING", "REVIEWING", "RESOLVED", "DISMISSED"),
             ReportStatus.entries.map { it.name }.toSet()
         )
     }

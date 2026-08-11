@@ -11,9 +11,11 @@ import com.golfmatch.app.domain.model.MatchRequestStatus
 import com.golfmatch.app.domain.model.Message
 import com.golfmatch.app.domain.model.Purpose
 import com.golfmatch.app.domain.model.Report
+import com.golfmatch.app.domain.model.ReportDetail
 import com.golfmatch.app.domain.model.ReportReasonCategory
 import com.golfmatch.app.domain.model.ReportStatus
 import com.golfmatch.app.domain.model.ReportTargetType
+import com.golfmatch.app.domain.model.ReportTargetUserDetail
 import com.golfmatch.app.domain.model.RoundEvent
 import com.golfmatch.app.domain.model.RoundJoinRequest
 import com.golfmatch.app.domain.model.RoundJoinRequestStatus
@@ -160,7 +162,27 @@ object TestFixtures {
         reasonText = reasonText,
         status = status,
         createdAt = fixedInstant,
-        reviewedAt = null
+        handledByUserId = null,
+        handledAt = null,
+        handlingMemo = null
+    )
+
+    /** 通報管理詳細画面（管理者向け）用のサンプルデータ（技術設計書6-9章、ADR-0007） */
+    fun reportDetail(
+        report: Report = report()
+    ): ReportDetail = ReportDetail(
+        report = report,
+        reporterName = "山田太郎",
+        reporterIconUrl = "https://example.com/icon.png",
+        targetUser = ReportTargetUserDetail(
+            userId = report.targetId,
+            name = "鈴木花子",
+            iconUrl = "https://example.com/icon2.png",
+            gender = "female",
+            age = 28,
+            introduction = "よろしくお願いします"
+        ),
+        targetBoardPost = null
     )
 
     fun area(

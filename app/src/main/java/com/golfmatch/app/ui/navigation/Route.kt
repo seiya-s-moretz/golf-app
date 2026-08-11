@@ -3,8 +3,8 @@ package com.golfmatch.app.ui.navigation
 /**
  * 画面遷移のRoute定義（技術設計書 3章：既存4画面 + 新規追加画面）。
  *
- * フッターメニュー5タブ化（メッセージ一覧をトップレベルタブにするか）は
- * 技術設計書3-3章の要確認事項だが、Route定義自体はどちらの構成でも利用できる形にしてある。
+ * フッターメニュー5タブ化（メッセージ一覧をトップレベルタブに追加）は技術設計書3-3章のとおり
+ * プロダクトオーナー確認により正式採用が確定している（[com.golfmatch.app.ui.component.GolfMatchBottomNavBar]参照）。
  */
 sealed class Route(val route: String) {
 
@@ -35,6 +35,15 @@ sealed class Route(val route: String) {
 
     // --- マイページ関連（新規） ---
     data object BlockedUsers : Route("mypage/blocked-users")
+
+    // --- 通報管理（簡易管理画面、管理者向け。新規、ADR-0007） ---
+    // マイページの「通報管理」メニュー項目（`User.is_admin=true`の場合のみ表示）からのみ到達可能（技術設計書3-4章）。
+    data object ReportAdminList : Route("admin/reports")
+
+    data object ReportAdminDetail : Route("admin/reports/{reportId}") {
+        const val ARG_REPORT_ID = "reportId"
+        fun createRoute(reportId: String) = "admin/reports/$reportId"
+    }
 
     // --- メッセージ（新規） ---
     data object MessageList : Route("messages")

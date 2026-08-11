@@ -35,6 +35,7 @@ data class MyPageUiState(
     val purpose: Purpose = Purpose.CASUAL,
     val introduction: String = "",
     val phoneVerified: Boolean = false,
+    val isAdmin: Boolean = false,
     val isSaving: Boolean = false,
     val saveSuccess: Boolean = false,
     val errorMessage: String? = null
@@ -83,7 +84,8 @@ class MyPageViewModel @Inject constructor(
                     averageScore = user.averageScore.toString(),
                     purpose = user.purpose,
                     introduction = user.introduction,
-                    phoneVerified = user.phoneVerified
+                    phoneVerified = user.phoneVerified,
+                    isAdmin = user.isAdmin
                 )
             }.onFailure { error ->
                 _uiState.value = _uiState.value.copy(

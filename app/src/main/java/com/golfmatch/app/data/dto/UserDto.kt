@@ -21,6 +21,7 @@ data class UserDto(
     @SerializedName("phone_verified") val phoneVerified: Boolean,
     @SerializedName("phone_verified_at") val phoneVerifiedAt: String?,
     @SerializedName("status") val status: String,
+    @SerializedName("is_admin") val isAdmin: Boolean = false,
     @SerializedName("created_at") val createdAt: String
 )
 

@@ -22,6 +22,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -53,7 +54,9 @@ fun MyPageScreen(
     onAverageScoreChange: (String) -> Unit = {},
     onPurposeSelected: (Purpose) -> Unit = {},
     onIntroductionChange: (String) -> Unit = {},
-    onSaveClick: () -> Unit = {}
+    onSaveClick: () -> Unit = {},
+    onBlockedUsersClick: () -> Unit = {},
+    onReportAdminClick: () -> Unit = {}
 ) {
     Scaffold { innerPadding ->
         when {
@@ -69,7 +72,9 @@ fun MyPageScreen(
                 onAverageScoreChange = onAverageScoreChange,
                 onPurposeSelected = onPurposeSelected,
                 onIntroductionChange = onIntroductionChange,
-                onSaveClick = onSaveClick
+                onSaveClick = onSaveClick,
+                onBlockedUsersClick = onBlockedUsersClick,
+                onReportAdminClick = onReportAdminClick
             )
         }
     }
@@ -106,7 +111,9 @@ private fun ProfileForm(
     onAverageScoreChange: (String) -> Unit,
     onPurposeSelected: (Purpose) -> Unit,
     onIntroductionChange: (String) -> Unit,
-    onSaveClick: () -> Unit
+    onSaveClick: () -> Unit,
+    onBlockedUsersClick: () -> Unit,
+    onReportAdminClick: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -228,6 +235,23 @@ private fun ProfileForm(
                 CircularProgressIndicator(modifier = Modifier.height(20.dp))
             } else {
                 Text("保存する")
+            }
+        }
+
+        OutlinedButton(
+            onClick = onBlockedUsersClick,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("ブロック済みユーザー一覧")
+        }
+
+        // `User.is_admin=true`の運営メンバーにのみ表示する（技術設計書3-4章、ADR-0007）
+        if (uiState.isAdmin) {
+            OutlinedButton(
+                onClick = onReportAdminClick,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("通報管理")
             }
         }
     }
