@@ -1,10 +1,12 @@
 # テスト計画：ゴルフマッチングアプリ（雛形・共通基盤フェーズ）
 
 作成日: 2026-08-11
-更新日: 2026-08-12（未実装だった残り全画面の実装・フッター5タブ化検証を反映、コミット590ebd9）
+更新日: 2026-08-12（サーバーサイドPhase1（認証基盤・エリア・ユーザー・ラウンド募集、`functions/`配下）の検証を反映、コミット27426b3。本更新でテスト方針をサーバーサイドにも拡張した。6章参照）
 作成者: TesterAgent
-対象: DeveloperAgent「プロジェクト雛形・共通基盤」フェーズ成果物、認証フロー画面実装（ADR-0006対応、コミット7f1b9c7）、および未実装だった残り全画面（ラウンド新規作成/詳細/参加申請一覧、受信マッチング申請一覧、通報画面・ブロック済みユーザー一覧、メッセージ一覧/スレッド、通報管理簡易管理画面）の実装・フッター5タブ化（ADR-0001・ADR-0007対応、コミット590ebd9）
-参照元: `docs/要件定義書.md`（PRD）, `docs/技術設計書.md`（技術設計）, `docs/adr/` 配下ADR, `README.md`
+対象: DeveloperAgent「プロジェクト雛形・共通基盤」フェーズ成果物、認証フロー画面実装（ADR-0006対応、コミット7f1b9c7）、未実装だった残り全画面（ラウンド新規作成/詳細/参加申請一覧、受信マッチング申請一覧、通報画面・ブロック済みユーザー一覧、メッセージ一覧/スレッド、通報管理簡易管理画面）の実装・フッター5タブ化（ADR-0001・ADR-0007対応、コミット590ebd9）、およびサーバーサイドPhase1実装（`functions/`配下、ADR-0008対応、コミット27426b3）
+参照元: `docs/要件定義書.md`（PRD）, `docs/技術設計書.md`（技術設計、特に12章・13章・5章・6-1〜6-4章）, `docs/adr/` 配下ADR（特に0001, 0003, 0006, 0007, 0008）, `README.md`, `functions/README.md`
+
+**本書の構成**: 1〜5章はAndroidクライアント（`app/`配下）のJVMユニットテストを対象とする（雛形フェーズ〜コミット590ebd9まで）。**6章はサーバーサイド（`functions/`配下、Cloud Functions for Firebase）の検証であり、本プロジェクトで初めてサーバーサイドのテスト対象化・自動テスト整備を行った箇所**である。テスト対象・テスト手法が異なるため独立した章として追加した。
 
 ---
 
@@ -339,3 +341,112 @@ DeveloperAgentは`ReportStatus`リネームに伴い`ReportMapperTest.kt`・`Ent
 **2026-08-12追記（ADR-0006対応検証）**: コミット7f1b9c7（OTP検証への新規/既存ユーザー判定統合・`POST /auth/login`廃止）について、`./gradlew :app:assembleDebug`・`./gradlew :app:testDebugUnitTest`はいずれも成功（66件成功、0失敗）した。ADR-0006「実装への影響」表（55〜65行目）とコード変更（`AuthDto.kt`, `ApiService.kt`, `AuthSession.kt`, `AuthRepository.kt`, `VerifyPhoneOtpUseCase.kt`, `LoginUseCase.kt`削除, `AuthRepositoryImpl.kt`, `AuthMapper.kt`, `OtpVerificationViewModel.kt`）を1件ずつ照合し、不一致は見つからなかった。`docs/技術設計書.md`6-1章・11-2章もADR-0006と整合している。4-1章で報告していた「ログイン成功時にAuthSession.userIdが空文字列になる」バグは、`POST /auth/login`廃止と暗黙フォールバック廃止（ADR-0005の原則の引き継ぎ）により解消されたことをテストで確認し「解消済み」に更新した。新規のクリティカルなバグは発見しなかったが、`VerifyPhoneOtpUseCase`の`ExistingUser`分岐テストが欠落していたため追加した（2-5-2章AUTH-8）。また、認証フロー画面のViewModelテスト・Repository実装層テストの未整備を軽微な参考事項として記録した（4-3章）。
 
 **2026-08-12追記（未実装だった残り全画面の実装検証、コミット590ebd9）**: `./gradlew :app:assembleDebug`・`./gradlew :app:testDebugUnitTest`はいずれも成功（104件成功、0失敗、既存66件＋新規38件）した。`ReportStatus`リネーム（ADR-0007）に伴う既存テストの追随修正について、アサーションが削られる形の弱化は無かったが、リネーム後4値中2値（`RESOLVED`/`DISMISSED`）が未検証、新規追加された管理者向けDTOマッパー・`User.isAdmin`が無テストという実質的なカバレッジ欠落を確認し補強した（2-6-1章）。新規追加された7 UseCase・複数ViewModelの分岐ロジック（主催者判定、承認/却下、多重操作防止ガード等）に対しテストを新規整備した（2-6-2章、`kotlinx-coroutines-test`を追加）。設計整合性レビューでは、DeveloperAgentからのエスカレーション3件のうち2件（画面ディレクトリ配置、管理者向けDTOの新規設計）は問題なしと判断し、1件（`GET /admin/reports`のページネーション未実装）は技術設計書6-9章との不整合として差し戻した（2-6-3章、4-5章）。加えて、新規に2件の指摘を記録した: (1)`ReportAdminDetailViewModel.save()`に他画面同様の多重操作防止ガードが欠落しているバグ（4-4章、再現テスト追加済み）、(2)`MessageThreadScreen`の自分/相手判定ロジックがViewModelではなくCompose Screen側にありJVMユニットテストの対象にできていない参考事項（4-6章）。
+
+---
+
+## 6. サーバーサイド（Cloud Functions for Firebase）テスト（2026-08-12追加、コミット27426b3検証）
+
+本章は、DeveloperAgentが実装したサーバーサイドPhase1（`functions/`配下、TypeScript / Express / Firestore。認証基盤・エリアマスタ・ユーザー・ラウンド募集参加承認フロー）の検証結果である。**本プロジェクトでサーバーサイドコードを検証対象とするのは今回が初めて**であり、6-0章でテスト方針をサーバーサイド向けに新たに定義したうえで実施した。
+
+### 6-0. テスト方針の拡張（サーバーサイド向け）
+
+Androidクライアント側（1〜5章）はUseCase/Mapperの単体テストをFakeリポジトリで行ってきたが、サーバーサイドは以下の理由からこの方針をそのまま適用せず、**Firestore Emulatorに対する統合テスト**を採用した。
+
+- `docs/技術設計書.md` 12-1章がサーバー側に「モック差し替えのためのリポジトリインターフェースを用意する必要性が薄い。実データストアに対してテストするほうが本番との乖離を防げる」という設計方針を明記しており（ADR-0008とも整合）、`service.ts`がFirestore Admin SDKを直接呼び出す構成上、単体テストのためにFirestoreをモックに差し替えることは同方針に反する
+- Express製の単一HTTPS関数（`app.ts`の`createApp()`）はCloud Functionsの薄いラッパーに過ぎず、実質的な検証対象は「HTTPリクエスト→バリデーション（zod）→`service.ts`のビジネスロジック→Firestore→レスポンス」の一連の流れそのものであるため、supertestで`createApp()`を直接叩く統合テストの方が実装の妥当性を直接検証できる
+
+導入したテストフレームワーク: **Jest + ts-jest + supertest + Firestore Emulator**（`@firebase/rules-unit-testing`もdevDependencyとして導入したが、今回のテストでは`firebase-admin`を直接使う既存の`src/config/firebaseAdmin.ts`の`db`をそのまま利用する方式を採ったため未使用。将来Firestoreセキュリティルール自体のテスト（現状は12-7章のとおり全拒否の単純なルールのため優先度低）を行う際に活用できる）。
+
+- テストコード: `functions/test/`配下（`functions/src/**/*.test.ts`は使用せず、`src/`をプロダクションコードのみに保つため独立ディレクトリとした）
+- 実行方法: `cd functions && npm test`（`package.json`に追加。内部で`firebase emulators:exec --only firestore ... "jest --runInBand"`を実行し、Firestore Emulatorの起動・テスト実行・終了までを一括で行う）
+- `firebase-tools`は`^13.35.1`をdevDependencyとして固定した。理由: 検証環境のJavaが17系だが、2026-08時点最新の`firebase-tools`（15系）が要求するJavaは21以上のため、Java 17でも動作する13系を採用した（`functions/README.md`に注記済み）
+- OTPコードの取得: `ConsoleSmsSender`が`firebase-functions/logger`経由でログ出力する内容を、`console.info`を横取りするテストヘルパー（`test/setup/consoleCapture.ts`）で読み取る方式とした。`functions/src`側の実装は一切変更していない
+- 60秒レート制限・OTP有効期限切れ等の時間依存の境界値は、実時間を待つ代わりにFirestore Emulator上のドキュメントの`createdAt`/`expiresAt`を直接書き換えて再現した（`functions/src`側は変更せず、テストデータの前提条件のみを操作する一般的な統合テスト手法）
+
+### 6-1. テスト対象範囲
+
+依頼で優先度が高いとされた分岐ロジック・認可・バリデーションを持つAPIを対象とした。
+
+| # | API | 対象ファイル |
+|---|---|---|
+| S-1 | `POST /auth/phone/otp` | `functions/test/auth/otp.test.ts` |
+| S-2 | `POST /auth/phone/verify` | `functions/test/auth/verify.test.ts` |
+| S-3 | `POST /users`（新規登録） | `functions/test/users/register.test.ts` |
+| S-4 | `GET /areas` | `functions/test/areas/areas.test.ts` |
+| S-5 | `GET /users/{id}` / `PUT /users/{id}` | `functions/test/users/getPut.test.ts` |
+| S-6 | ラウンド参加申請・承認/却下フロー（`POST /round-events`, `GET/POST /round-events/{id}`, `POST /round-events/{id}/join-requests`, `GET .../join-requests`, `POST .../approve`, `POST .../reject`） | `functions/test/roundEvents/joinRequests.test.ts` |
+
+対象外（Phase1未実装のため）: おすすめユーザー・マッチング申請（Phase2）、掲示板（Phase2）、メッセージ・通報・ブロック・通報管理（Phase3）。Twilioへの実SMS送信も対象外（`TwilioSmsSender`は未結線のスタブであり、`ConsoleSmsSender`のみをテスト対象とした。技術設計書12-5章の設計どおり）。
+
+### 6-2. テストケースの要点
+
+| # | 観点 | 主なケース |
+|---|---|---|
+| S-1 | OTP送信の60秒レート制限 | 初回204、60秒以内の再送信は429（旧OTP維持を確認）、60秒経過後は204で新OTP発行、電話番号ごとに独立、E.164形式バリデーション |
+| S-2 | OTP検証・新規/既存判定 | OTP不一致400、未発行電話番号400、6桁以外の`otp_code`は400（zod）、未登録→`is_new_user=true`+`registration_token`、登録済み→`is_new_user=false`+`user`+`access_token`、試行5回超過でFAILED、有効期限切れ400、**【バグ再現】既存ユーザー分岐のレスポンス構造の契約違反（6-4章参照）** |
+| S-3 | `POST /users` | 有効`registration_token`で201・`access_token`発行、発行後のトークンで認証必須APIを呼べる、不正/使い切り済み`registration_token`は401、`area_id`不正/非活性は400、`age`(0〜120)・`average_score`(40〜200)の境界値・範囲外 |
+| S-4 | `GET /areas` | `is_active=true`のみ、`display_order`昇順、認証不要、0件時は空配列、レスポンス項目名の一致 |
+| S-5 | `GET/PUT /users/{id}` | 未認証401、無効トークン401、本人取得200、他人取得200（**PII露出の懸念、6-4章参照**）、存在しないID404、PUTは本人以外403・未認証401・本人200・`age`/`average_score`の境界値・非活性/不正`area_id`400・不正`purpose`enum400 |
+| S-6 | ラウンド参加申請フロー | 未認証401、`current=0`で作成、`capacity>current`検証（申請時・承認時の両方）、重複PENDING申請409、`GET .../join-requests`は主催者以外403、承認で`current`加算・`Connection`作成（`connections/{pairId}`を直接Getして確認）、主催者以外の承認/却下は403、二重承認防止409、却下後は`Connection`未作成・`current`加算なし |
+
+### 6-3. 技術設計書・ADRとの整合性レビュー
+
+`docs/技術設計書.md` 5章・6-1〜6-4章・12章・13章と`functions/src`配下の実装を1件ずつ照合した。エンドポイントのパス・メソッド・認証要否・バリデーション内容（年齢0〜120、スコア40〜200、E.164形式、OTP6桁等）・エラーレスポンス形式（`{ error: { code, message } }`）・Firestoreコレクション設計（12-2章のコレクション名・ドキュメントID戦略・複合インデックス）・認証ミドルウェア仕様（12-3〜12-4章）は、6-4章に記載する1件を除き矛盾は見つからなかった。
+
+#### DeveloperAgentからのエスカレーション3件への判断
+
+| # | エスカレーション事項 | TesterAgentの判断 |
+|---|---|---|
+| E-1 | `registration_token`を専用コレクションではなく`phoneVerifications`ドキュメントの内部拡張（`registrationTokenHash`/`registrationTokenExpiresAt`）として保存 | **問題なし**。技術設計書12-0章「前提1」が「クエリ簡略化・非正規化のための内部専用フィールドの追加は5章定義の変更にあたらない」と明記しており、本判断はこの前提の範囲内である。電話番号キーで管理されている既存ドキュメントに相乗りすることで、専用コレクションを新設した場合に必要になる追加のクエリ・複合インデックスも発生させておらず、実装上の合理性もある。`toUserResponse`等のAPIレスポンス生成コードで`registrationTokenHash`が漏洩していないことも確認した（`users.service.ts`の`UserResponse`に該当フィールドは存在しない）。ArchitectAgentへの差し戻しは不要だが、12-2-2章のコレクション一覧表に将来的に注記を追加しておくと次回以降のDeveloperAgent・TesterAgentが同じ疑問を持たずに済む（任意、緊急度低） |
+| E-2 | `PUT /users/{id}`の認可を「本人のみ許可・403」として実装判断で追加 | **問題なし（むしろ必須の実装）**。技術設計書6-4章の他の書き込み系API（`.../approve`等）はいずれも「認可: `created_by`本人のみ」等を明記しており、`PUT /users/{id}`だけ認可要件が欠落しているのは6-3章側の記載漏れである可能性が高い。認可を実装しなかった場合、任意の認証済みユーザーが他人のプロフィールを書き換えられる重大な脆弱性になるため、「本人のみ許可」という判断は唯一の妥当な実装である。`functions/test/users/getPut.test.ts`で本人以外403・本人200を確認済み。ArchitectAgentへは差し戻し不要だが、技術設計書6-3章に「認可: 本人のみ」を明記する軽微な追記を推奨する |
+| E-3 | `GET /round-events/{id}`（技術設計書6-4章に明記が無いが、Androidクライアント`ApiService.kt`が既に呼び出しているため追加実装） | **問題なし**。`app/src/main/java/com/golfmatch/app/data/api/ApiService.kt`を確認したところ、`@GET("round-events/{id}")`が実際に定義されており（`getRoundEvent()`）、DeveloperAgentの主張どおりクライアントは既にこのエンドポイントに依存している。実装しなければAndroid側のラウンド詳細画面が機能しないため、追加実装は正しい判断である。認証必須（`roundEventsRoutes.use(authenticate)`が全ルートに適用される）である点も他のround-events系APIと一貫しており問題ない。技術設計書6-4章への正式な追記をArchitectAgentに推奨する（機能的な問題はなく、ドキュメント整備の位置づけ） |
+
+3件とも実装差し戻しは不要と判断した。ただし3件とも技術設計書側の記載漏れに起因するエスカレーションであるため、ArchitectAgentが6-3章・6-4章・12-2-2章の記載を実装に合わせて補完することを推奨する（機能追加ではなく既存実装の追認のための文書更新）。
+
+### 6-4. 発見した不整合・バグ報告（DeveloperAgentへの差し戻し事項）
+
+#### 6-4-1.【重大・要差し戻し】`POST /auth/phone/verify`の既存ユーザー分岐レスポンスがAndroidクライアントの契約と一致しない
+
+- 対象コード: `functions/src/modules/auth/auth.service.ts`の`verifyPhoneOtp()`（`is_new_user=false`分岐、117〜121行目）
+- 再現テスト: `functions/test/auth/verify.test.ts`の`【バグ再現】is_new_user=false時、user・access_tokenがsessionにネストされずトップレベルに返る（Androidクライアント契約違反）`（Pass=バグ挙動が現状のまま存在することを確認する目的）
+- 詳細:
+  - ADR-0006「実装への影響」表（`app/src/main/java/com/golfmatch/app/data/dto/AuthDto.kt`の行）は、`VerifyOtpResponseDto`が`session: AuthSessionResponseDto?`（`is_new_user=false`時のみ非null、`AuthSessionResponseDto`は`user`・`access_token`を持つ**ネストしたオブジェクト**）を持つと明記しており、実装済みのAndroidクライアント（`AuthDto.kt`）も実際にそのとおりの構造になっている
+  - `AuthMapper.kt`の`VerifyOtpResponseDto.toDomain()`は`is_new_user=false`時に`checkNotNull(session)`でこの`session`フィールドの非null性を必須としている（`docs/test-plan.md`旧版2-5-2章AUTH-4も参照）
+  - 一方、サーバー実装（`verifyPhoneOtp()`）は`user`・`access_token`を`session`にネストさせず、**トップレベルのフィールド**として返している（`{ is_new_user: false, user: {...}, access_token: "..." }`）
+- 再現手順:
+  1. 登録済みユーザーの電話番号でOTP発行・検証を行う
+  2. サーバーのレスポンスは`{ is_new_user: false, user: {...}, access_token: "..." }`という平坦な構造で返る
+  3. Androidクライアントがこれをパースすると、Gsonは存在しない`session`キーを`null`として扱うため、`AuthMapper.kt`の`checkNotNull(session)`が例外を送出する
+- 期待される結果: `{ is_new_user: false, session: { user: {...}, access_token: "..." } }`という、`session`にネストした構造で返ること
+- 実際の結果: `session`キー自体が存在せず、`user`・`access_token`がトップレベルに置かれている
+- 影響: **既存ユーザーの再ログイン（`POST /auth/phone/verify`の`is_new_user=false`分岐）がAndroidクライアント側で必ず例外となり失敗する。** 新規登録直後の初回ログイン（`POST /users`のレスポンスは`AuthSessionResponseDto`をそのまま返す設計であり平坦な構造で一致するため問題なし）は影響を受けないが、アプリ再起動後の再ログイン等、既存ユーザーとして`verify`を通るケース全てが影響を受ける、認証基盤の中核に関わる重大度の高い不具合
+- 差し戻し内容: `verifyPhoneOtp()`の`is_new_user=false`時のレスポンスを`{ is_new_user: false, session: { user, access_token } }`という構造に修正する必要がある。技術設計書6-1章の文言自体（「`user`、`access_token`」という記載）はネスト構造を明示していないため、あわせてADR-0006の内容を正として6-1章の表現を明確化する追記をArchitectAgentに依頼することを推奨する
+
+#### 6-4-2.【要確認・PII露出の懸念】`GET /users/{id}`が他人閲覧時にも生の電話番号(`phone_number`)を返す
+
+- 対象コード: `functions/src/modules/users/users.service.ts`の`toUserResponse()`
+- 再現テスト: `functions/test/users/getPut.test.ts`の`【要確認】他人のプロフィール取得時にもphone_number（生の電話番号）が含まれる`
+- 詳細: 技術設計書6-3章の`GET /users/{id}`の記述は「レスポンスに`area`（AreaMasterの参照展開）, `phone_verified`を追加」という差分表現のみであり、`phone_number`自体を追加するとは明記していない。一方5-1章のUser Entity定義は`phone_number`を新規フィールドとして挙げているため、実装（Userの論理モデル全体を返す）は12-0章「前提1」の解釈次第では矛盾しないとも言える。いずれの解釈が正しいにせよ、Androidクライアントの`GetUserUseCase`は`BoardViewModel`・`MessageThreadViewModel`から「他人」のプロフィール取得（掲示板投稿者・メッセージ相手）にも使われている（`GET /users/{id}`は本人限定ではなく認証済みなら誰でも呼べる、6-4-3参照）ため、実運用では任意の認証済みユーザーが他ユーザーの生電話番号を閲覧できてしまう
+- 実装はバグではなく、技術設計書の記述をどちらの解釈で読むかに依存する設計レベルの論点である。ただしPRD 3-1章の本人確認（SMS OTP）は「なりすまし・Bot登録の抑止」が目的であり、電話番号を他ユーザーに公開する意図は読み取れないため、ArchitectAgentに「`GET /users/{id}`のレスポンスから`phone_number`を除外する（本人が自分の情報を確認する用途は別途`GET /users/me`相当の設計を検討する、または`phone_verified`のみで足りるかを再確認する）」方向での再検討を推奨する
+- 差し戻し内容（提案、決定はArchitectAgent/DeveloperAgentに委ねる）: `phone_number`をレスポンスから外す、または閲覧者が本人の場合のみ含める等の設計判断を仰ぎたい
+
+#### 6-4-3.【軽微・参考】`GET /users/{id}`に本人限定の認可が無いこと自体は技術設計書の記述通り（バグではない）
+
+- 6-3章E-2で判断したとおり`PUT /users/{id}`（更新系）は本人限定にすべきだが、`GET /users/{id}`（閲覧系）はそもそも掲示板投稿者・ラウンド参加者等「他人」のプロフィールを見るために使われる設計であり、本人限定にしないこと自体は妥当。6-4-2章のPII露出懸念とは別の論点として記録する（差し戻し不要）
+
+#### 6-4-4.【環境依存・参考】Windows環境でのFirestore Emulatorプロセス残留（プロダクトのバグではない）
+
+- `firebase emulators:exec`がCLIログ上「正常終了」を報告した後も、Firestore Emulatorの子プロセス（`java.exe`）がOSプロセスとして残留し、次回のテスト実行時に`Port 8080 is not open`エラーで失敗することが本検証中に複数回発生した。`firebase-tools`のWindows環境におけるシグナルハンドリングに起因すると見られる既知の環境依存の癖であり、`functions/src`側の実装とは無関係である。`functions/README.md`に対処法（残留プロセスの特定・終了）を注記した。CI環境（Linux）ではこの問題は発生しない可能性が高いが、CI導入時は要観察
+
+### 6-5. テスト実行結果サマリ
+
+- 実行コマンド: `cd functions && npm test`（`firebase emulators:exec --only firestore ... "jest --runInBand"`）
+- 実行環境: Node.js v22.16.0 / Java 17（`firebase-tools@13.35.1`に固定。6-0章参照）
+- テストスイート: **6ファイル全て成功**
+- テストケース: **63件実行、成功63件、失敗0件**（クリーンな環境で2回連続実行し安定して63件成功することを確認。内訳は6-2章の表に対応する各テストファイル: `otp.test.ts` 7件、`verify.test.ts` 8件（うちバグ再現1件）、`register.test.ts` 13件、`areas.test.ts` 5件、`getPut.test.ts` 14件（うちPII露出確認1件）、`joinRequests.test.ts` 15件）
+- ビルド・Lint: `npm run build`（`tsc`）・`npm run lint`（`eslint src --ext .ts`）はいずれも成功（テストコード追加による`src`配下への影響が無いことを確認）
+- リグレッション: 本検証はサーバーサイドの新規テスト整備であり、Androidクライアント側（1〜5章）の既存テストへの影響はない（`app/`配下は変更していない）
+
+### 6-6. まとめ
+
+サーバーサイドPhase1実装について、6章のAPI仕様・5章のデータモデル・ADR-0001/0003/0006/0007/0008との整合性を63件のFirestore Emulator統合テストで検証した。DeveloperAgentからのエスカレーション3件はいずれも実装差し戻し不要と判断したが、対応する技術設計書側の記載漏れ（6-3章の認可要件、6-4章の`GET /round-events/{id}`、12-2-2章の`registration_token`保存場所）をArchitectAgentが補完することを推奨する。新たに、認証基盤の中核に影響する重大な契約違反バグ（`POST /auth/phone/verify`の既存ユーザー分岐レスポンスが`session`にネストされていない、6-4-1章）を発見し、DeveloperAgentへの差し戻し事項として記録した。また、PII露出の懸念（`GET /users/{id}`が他人閲覧時にも生の電話番号を返す、6-4-2章）を設計レベルの要確認事項としてArchitectAgentに提起した。
