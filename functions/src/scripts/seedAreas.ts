@@ -13,17 +13,48 @@
  *
  * 冪等: 固定UUID文字列をドキュメントIDとして使うため、複数回実行しても重複作成されず上書きされる。
  * 安全策として`FIRESTORE_EMULATOR_HOST`が未設定の場合は実行を中止する（本番Firestoreへの誤投入防止）。
+ *
+ * 本番Firestoreへ意図的に投入する場合のみ、明示的なオプトインとして`SEED_TARGET=production`と
+ * 対象プロジェクトの`GCLOUD_PROJECT`を指定する（暗黙に本番へ向かないよう、両方の指定を必須とする）。
+ * 認証はAdmin SDKのApplication Default Credentialsに従う（`GOOGLE_APPLICATION_CREDENTIALS`で
+ * サービスアカウント鍵を指定するか、`gcloud auth application-default login`を実行しておく）。
+ *
+ *      GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json \
+ *      SEED_TARGET=production GCLOUD_PROJECT=<プロジェクトID> npm run seed:areas
+ *
+ * 投入するエリア名は暫定値である（初期展開エリアの具体名は未確定。技術設計書10章#5）。
  */
 import { initializeApp } from "firebase-admin/app";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 
-if (!process.env.FIRESTORE_EMULATOR_HOST) {
+const isProductionSeed = process.env.SEED_TARGET === "production";
+
+if (!isProductionSeed && !process.env.FIRESTORE_EMULATOR_HOST) {
   // eslint-disable-next-line no-console
   console.error(
     "FIRESTORE_EMULATOR_HOST が設定されていません。本番Firestoreへの誤投入を避けるため処理を中止します。\n" +
-      "例: FIRESTORE_EMULATOR_HOST=localhost:8080 npm run seed:areas"
+      "例: FIRESTORE_EMULATOR_HOST=localhost:8080 npm run seed:areas\n" +
+      "本番へ意図的に投入する場合は SEED_TARGET=production GCLOUD_PROJECT=<プロジェクトID> を指定してください。"
   );
   process.exit(1);
+}
+
+if (isProductionSeed) {
+  if (process.env.FIRESTORE_EMULATOR_HOST) {
+    // eslint-disable-next-line no-console
+    console.error(
+      "SEED_TARGET=production と FIRESTORE_EMULATOR_HOST が同時に指定されています。" +
+        "投入先が曖昧なため処理を中止します。"
+    );
+    process.exit(1);
+  }
+  if (!process.env.GCLOUD_PROJECT) {
+    // eslint-disable-next-line no-console
+    console.error("SEED_TARGET=production の場合は GCLOUD_PROJECT に対象プロジェクトIDを指定してください。");
+    process.exit(1);
+  }
+  // eslint-disable-next-line no-console
+  console.warn(`【注意】本番Firestore（project=${process.env.GCLOUD_PROJECT}）へ投入します。`);
 }
 
 initializeApp({ projectId: process.env.GCLOUD_PROJECT ?? "golf-app-dev-placeholder" });
