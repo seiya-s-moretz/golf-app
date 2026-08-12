@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material3.CircularProgressIndicator
@@ -20,7 +21,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
@@ -37,12 +43,17 @@ import kotlinx.datetime.Instant
  * シンプルなチャットUI（メッセージ一覧＋下部にテキスト入力＋送信ボタン）。既読/未読の細かい制御
  * （`read_at`更新API呼び出し）は行わず表示のみに留める（技術設計書6-7章・[com.golfmatch.app.ui.viewmodel.MessageThreadViewModel]参照）。
  * 1:1会話のため、送信者IDが[MessageThreadUiState.partnerId]と一致しないメッセージは自分の発言として表示する。
+ *
+ * [MessageThreadUiState.messages]は古い順（末尾が最新）で渡される。上端に近づくと[onLoadOlder]で
+ * 過去メッセージを遡って読み込み（技術設計書6-7章の`before`/`limit`）、最新メッセージが増えたときは
+ * 末尾までスクロールする。
  */
 @Composable
 fun MessageThreadScreen(
     uiState: MessageThreadUiState,
     onInputTextChange: (String) -> Unit = {},
-    onSendClick: () -> Unit = {}
+    onSendClick: () -> Unit = {},
+    onLoadOlder: () -> Unit = {}
 ) {
     Scaffold(
         bottomBar = {
@@ -58,7 +69,7 @@ fun MessageThreadScreen(
             uiState.isLoading -> LoadingContent(innerPadding)
             uiState.errorMessage != null && uiState.messages.isEmpty() ->
                 ErrorContent(innerPadding, uiState.errorMessage)
-            else -> MessageThreadContent(innerPadding, uiState)
+            else -> MessageThreadContent(innerPadding, uiState, onLoadOlder)
         }
     }
 }
@@ -83,8 +94,30 @@ private fun ErrorContent(padding: PaddingValues, message: String) {
     }
 }
 
+/** スレッド上端から何件手前で過去メッセージの読み込みを開始するか */
+private const val LOAD_OLDER_THRESHOLD = 3
+
 @Composable
-private fun MessageThreadContent(padding: PaddingValues, uiState: MessageThreadUiState) {
+private fun MessageThreadContent(
+    padding: PaddingValues,
+    uiState: MessageThreadUiState,
+    onLoadOlder: () -> Unit
+) {
+    val listState = rememberLazyListState()
+    val shouldLoadOlder by remember(uiState.messages.size, uiState.hasOlder) {
+        derivedStateOf { uiState.hasOlder && listState.firstVisibleItemIndex <= LOAD_OLDER_THRESHOLD }
+    }
+    LaunchedEffect(shouldLoadOlder) {
+        if (shouldLoadOlder) onLoadOlder()
+    }
+
+    // 最新メッセージが増えたとき（初回表示・送信直後）だけ末尾へスクロールする。
+    // 過去メッセージの読み込みでは末尾のIDが変わらないため、閲覧位置を奪わない。
+    val latestMessageId = uiState.messages.lastOrNull()?.messageId
+    LaunchedEffect(latestMessageId) {
+        if (latestMessageId != null) listState.scrollToItem(uiState.messages.lastIndex)
+    }
+
     Column(modifier = Modifier.fillMaxSize().padding(padding)) {
         Text(
             text = uiState.partnerName.ifEmpty { "トーク" },
@@ -109,7 +142,14 @@ private fun MessageThreadContent(padding: PaddingValues, uiState: MessageThreadU
                 Text(text = "メッセージはまだありません", style = MaterialTheme.typography.bodyLarge)
             }
         } else {
+            // 過去メッセージの読み込み状態はリスト外（上端）に出す。LazyColumnの要素にすると
+            // 表示の有無でインデックスがずれ、末尾へのスクロール位置計算が壊れるため。
+            when {
+                uiState.isLoadingOlder -> LoadOlderIndicator()
+                uiState.hasOlder && uiState.errorMessage != null -> LoadOlderRetryButton(onClick = onLoadOlder)
+            }
             LazyColumn(
+                state = listState,
                 modifier = Modifier.fillMaxSize().weight(1f),
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -119,6 +159,20 @@ private fun MessageThreadContent(padding: PaddingValues, uiState: MessageThreadU
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun LoadOlderIndicator() {
+    Box(modifier = Modifier.fillMaxWidth().padding(8.dp), contentAlignment = Alignment.Center) {
+        CircularProgressIndicator()
+    }
+}
+
+@Composable
+private fun LoadOlderRetryButton(onClick: () -> Unit) {
+    Box(modifier = Modifier.fillMaxWidth().padding(4.dp), contentAlignment = Alignment.Center) {
+        TextButton(onClick = onClick) { Text("過去のメッセージを再読み込み") }
     }
 }
 

@@ -21,6 +21,7 @@ fun MessageThreadContainer(
     MessageThreadScreen(
         uiState = uiState,
         onInputTextChange = { text -> viewModel.onInputTextChange(text) },
-        onSendClick = { viewModel.send() }
+        onSendClick = { viewModel.send() },
+        onLoadOlder = { viewModel.loadOlder() }
     )
 }

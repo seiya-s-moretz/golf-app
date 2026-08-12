@@ -338,6 +338,20 @@ DeveloperAgentは`ReportStatus`リネームに伴い`ReportMapperTest.kt`・`Ent
 - 依頼文の背景説明では「`MessageThreadViewModel`の自分/相手判定」という前提だったが、実際に確認したところ、この判定ロジック（`senderId != partnerId`でどちらの発言か判定）は`MessageThreadViewModel`ではなく`MessageThreadScreen`（`@Composable`関数）側に実装されていた。`MessageThreadViewModel`自体には分岐ロジックがほぼ無い（取得・送信の委譲のみ）。
 - 動作上の不具合ではないが、0章のテスト方針（Compose UIテストは対象外、ViewModelはJVMユニットテスト対象）のもとでは、このロジックはCompose関数内にあるためJVMユニットテストの対象にできず（Robolectric等の追加基盤が必要）、実質的にテストカバレッジが無い状態になっている。ロジック自体は`senderId`と`partnerId`の単純な不一致判定であり複雑ではないため緊急度は低いが、将来的に`ViewModel`側で`isMine`を含む形式に変換してから`UiState`に渡す設計に変更すれば、JVMユニットテストの対象にできる（差し戻し必須ではない、設計改善の余地として記録）
 
+### 4-7. 【解消済み】メッセージスレッドの表示順が逆で、過去メッセージを遡れない（2026-08-13追加・同日修正）
+
+4-5章と同種の「サーバーのページネーションにクライアントが未追随」の欠落をメッセージ機能側でも確認し、あわせて表示順の不整合を発見した。
+
+- **表示順の不整合（バグ）**: `GET /conversations/{partnerId}/messages`は`created_at`降順（新しい順）で返す（`functions/src/modules/messaging/messaging.service.ts`、`messaging.test.ts`「送受信したメッセージをcreated_at降順で返す」で担保）。`MessageRepositoryImpl`・`MessageThreadViewModel`はこれをそのまま`UiState.messages`へ格納し、`MessageThreadScreen`が上から順に描画していたため、**最新メッセージが一番上、最古が一番下**に表示されていた。一方で`MessageThreadViewModel.send()`は送信したメッセージをリスト**末尾**に追加するため、自分が送ったメッセージだけが最古メッセージのさらに下に並ぶという矛盾した状態になっていた
+- **ページネーション未追随**: `MessageThreadViewModel.load()`が`getMessagesUseCase(partnerId)`を引数なしで呼んでおり（既定値`before=null`/`limit=50`）、直近50件より前の履歴を取得する手段が無かった
+- 修正内容:
+  - `MessageThreadUiState.messages`を**古い順（末尾が最新）**で保持する契約に変更し、`load()`でAPIレスポンスを反転して格納する。これによりチャットUIの下端＝最新、`send()`の末尾追加が整合する
+  - `isLoadingOlder`/`hasOlder`を追加し、`loadOlder()`が先頭（最古）の`created_at`を`before`カーソルとして過去ページを取得、反転して先頭に連結する（`PAGE_SIZE=50`）
+  - `MessageThreadScreen`は上端3件手前で`onLoadOlder`を発火。読み込み中インジケータ・再試行ボタンはLazyColumnの外（上端）に配置している（リスト要素にすると表示の有無でインデックスがずれ、末尾スクロール位置の計算が壊れるため）
+  - 最新メッセージのIDが変わったとき（初回表示・送信直後）のみ末尾へスクロールする。過去読み込みでは末尾IDが変わらないため閲覧位置を奪わない
+  - 技術設計書7-2章の`MessageThreadUiState`・`ReportAdminListUiState`定義に追加フィールドと並び順の注記を反映
+- 検証: `MessageThreadViewModelTest`（新規7件）で、新しい順→古い順への反転・カーソル引数・先頭への連結・PAGE_SIZE未満での打ち切り・多重発火ガード・失敗時の`hasOlder`維持・送信メッセージが末尾に入ることを確認。`./gradlew :app:testDebugUnitTest`は117件成功、0失敗
+
 ---
 
 ## 5. 結論
