@@ -66,6 +66,11 @@ jobs:
           }
           JSON
 
+      # gradlewの実行権限はgitのファイルモード(100755)で管理しているが、Windowsからのコミットで
+      # 落ちることがあるため保険として付与する
+      - name: gradlew に実行権限を付与
+        run: chmod +x ./gradlew
+
       - name: ユニットテスト
         run: ./gradlew :app:testDebugUnitTest --no-daemon
 
