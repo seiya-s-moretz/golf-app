@@ -17,7 +17,8 @@ data class UserDto(
     @SerializedName("average_score") val averageScore: Int,
     @SerializedName("purpose") val purpose: String,
     @SerializedName("introduction") val introduction: String,
-    @SerializedName("phone_number") val phoneNumber: String,
+    // 他人閲覧時はPII保護のためサーバーがフィールド自体を省略する（本人閲覧時のみ非null）
+    @SerializedName("phone_number") val phoneNumber: String?,
     @SerializedName("phone_verified") val phoneVerified: Boolean,
     @SerializedName("phone_verified_at") val phoneVerifiedAt: String?,
     @SerializedName("status") val status: String,

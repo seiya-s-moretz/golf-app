@@ -17,7 +17,8 @@ data class User(
     val averageScore: Int,
     val purpose: Purpose,
     val introduction: String,
-    val phoneNumber: String,
+    // 他人閲覧時はPII保護のためnull（本人閲覧時のみ非null）
+    val phoneNumber: String?,
     val phoneVerified: Boolean,
     val phoneVerifiedAt: Instant?,
     val status: AccountStatus,
