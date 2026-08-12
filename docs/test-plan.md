@@ -1,12 +1,12 @@
 # テスト計画：ゴルフマッチングアプリ（雛形・共通基盤フェーズ）
 
 作成日: 2026-08-11
-更新日: 2026-08-12（サーバーサイドPhase1（認証基盤・エリア・ユーザー・ラウンド募集、`functions/`配下）の検証を反映、コミット27426b3。本更新でテスト方針をサーバーサイドにも拡張した。6章参照）
+更新日: 2026-08-12（サーバーサイドPhase2（おすすめユーザー・マッチング申請・掲示板、`functions/`配下）の検証を反映、コミットfa5f4cd。7章参照）
 作成者: TesterAgent
-対象: DeveloperAgent「プロジェクト雛形・共通基盤」フェーズ成果物、認証フロー画面実装（ADR-0006対応、コミット7f1b9c7）、未実装だった残り全画面（ラウンド新規作成/詳細/参加申請一覧、受信マッチング申請一覧、通報画面・ブロック済みユーザー一覧、メッセージ一覧/スレッド、通報管理簡易管理画面）の実装・フッター5タブ化（ADR-0001・ADR-0007対応、コミット590ebd9）、およびサーバーサイドPhase1実装（`functions/`配下、ADR-0008対応、コミット27426b3）
-参照元: `docs/要件定義書.md`（PRD）, `docs/技術設計書.md`（技術設計、特に12章・13章・5章・6-1〜6-4章）, `docs/adr/` 配下ADR（特に0001, 0003, 0006, 0007, 0008）, `README.md`, `functions/README.md`
+対象: DeveloperAgent「プロジェクト雛形・共通基盤」フェーズ成果物、認証フロー画面実装（ADR-0006対応、コミット7f1b9c7）、未実装だった残り全画面（ラウンド新規作成/詳細/参加申請一覧、受信マッチング申請一覧、通報画面・ブロック済みユーザー一覧、メッセージ一覧/スレッド、通報管理簡易管理画面）の実装・フッター5タブ化（ADR-0001・ADR-0007対応、コミット590ebd9）、サーバーサイドPhase1実装（`functions/`配下、ADR-0008対応、コミット27426b3、および後続の修正コミット1770df3・cd26d55）、およびサーバーサイドPhase2実装（おすすめユーザー・マッチング申請・掲示板、`functions/`配下、コミットfa5f4cd）
+参照元: `docs/要件定義書.md`（PRD、特に3-1章のレコメンドロジック）, `docs/技術設計書.md`（技術設計、特に12章・13章・5章・6-1〜6-6章）, `docs/adr/` 配下ADR（特に0001, 0003, 0006, 0007, 0008）, `README.md`, `functions/README.md`
 
-**本書の構成**: 1〜5章はAndroidクライアント（`app/`配下）のJVMユニットテストを対象とする（雛形フェーズ〜コミット590ebd9まで）。**6章はサーバーサイド（`functions/`配下、Cloud Functions for Firebase）の検証であり、本プロジェクトで初めてサーバーサイドのテスト対象化・自動テスト整備を行った箇所**である。テスト対象・テスト手法が異なるため独立した章として追加した。
+**本書の構成**: 1〜5章はAndroidクライアント（`app/`配下）のJVMユニットテストを対象とする（雛形フェーズ〜コミット590ebd9まで）。**6章・7章はサーバーサイド（`functions/`配下、Cloud Functions for Firebase）の検証**である。6章はPhase1（認証基盤・エリア・ユーザー・ラウンド募集）、7章はPhase2（おすすめユーザー・マッチング申請・掲示板）を対象とする。テスト対象・テスト手法が異なるため独立した章として追加した。
 
 ---
 
@@ -450,3 +450,67 @@ Androidクライアント側（1〜5章）はUseCase/Mapperの単体テストを
 ### 6-6. まとめ
 
 サーバーサイドPhase1実装について、6章のAPI仕様・5章のデータモデル・ADR-0001/0003/0006/0007/0008との整合性を63件のFirestore Emulator統合テストで検証した。DeveloperAgentからのエスカレーション3件はいずれも実装差し戻し不要と判断したが、対応する技術設計書側の記載漏れ（6-3章の認可要件、6-4章の`GET /round-events/{id}`、12-2-2章の`registration_token`保存場所）をArchitectAgentが補完することを推奨する。新たに、認証基盤の中核に影響する重大な契約違反バグ（`POST /auth/phone/verify`の既存ユーザー分岐レスポンスが`session`にネストされていない、6-4-1章）を発見し、DeveloperAgentへの差し戻し事項として記録した。また、PII露出の懸念（`GET /users/{id}`が他人閲覧時にも生の電話番号を返す、6-4-2章）を設計レベルの要確認事項としてArchitectAgentに提起した。
+
+**2026-08-12追記（Phase1バグ修正の反映確認）**: 6-4-1章のバグはコミット1770df3「fix: verify OTPレスポンスのsessionネスト化と他人閲覧時のphone_number非露出」で修正済みであることを、既存テスト`verify.test.ts`が引き続き成功していること（本更新時点のテスト実行結果は7-5章参照）で確認した。同コミットでは6-4-2章のPII露出懸念にも対応し、`toUserResponse()`が閲覧者本人の場合のみ`phone_number`を含めるよう修正されている（`getPut.test.ts`の該当テストが更新され成功していることを確認済み、7章の回帰確認の一部）。いずれも本章時点（6章）のテストコードは修正不要であり、DeveloperAgent側で追随修正されたテストがそのまま成功する形になっている。
+
+---
+
+## 7. サーバーサイドPhase2（おすすめユーザー・マッチング申請・掲示板）テスト（2026-08-12追加、コミットfa5f4cd検証）
+
+本章は、DeveloperAgentが実装したサーバーサイドPhase2（`functions/src/modules/matching/`・`functions/src/modules/board/`。おすすめユーザー・マッチング申請・掲示板）の検証結果である。テスト方針・テスト基盤（Jest + ts-jest + supertest + Firestore Emulator）は6-0章と同一のものを踏襲した。
+
+### 7-1. テスト対象範囲
+
+| # | API | 対象ファイル |
+|---|---|---|
+| P-1 | `GET /users/recommend` | `functions/test/matching/recommend.test.ts` |
+| P-2 | `POST /users/{id}/match-requests` | `functions/test/matching/matchRequests.test.ts` |
+| P-3 | `GET /users/me/match-requests?direction=received\|sent` | `functions/test/matching/matchRequests.test.ts` |
+| P-4 | `POST /match-requests/{id}/approve` / `reject` | `functions/test/matching/matchRequests.test.ts` |
+| P-5 | `GET /board` / `POST /board` | `functions/test/board/board.test.ts` |
+| P-6 | `/users`プレフィックス共有によるルーティング回帰確認（`usersMatchingRoutes`と`usersRoutes`） | `functions/test/matching/usersRouting.test.ts` |
+
+対象外（Phase3未実装のため）: ブロック関係によるおすすめユーザー・掲示板からの除外フィルタ（6-5・6-6章に明記されているが、コミットメッセージ・`matching.service.ts`/`board.service.ts`のコメントに「ブロックによる除外はPhase3で後付け改修する方針」と明記されており、13-3章の依存関係を踏まえた計画的な未実装であることをコードで確認した。バグとしては扱わない）。メッセージ・通報・通報管理（Phase3）も引き続き対象外。
+
+### 7-2. テストケースの要点
+
+| # | 観点 | 主なケース |
+|---|---|---|
+| P-1 | レコメンドスコアリング境界値 | 未認証401、自分自身が結果に含まれない、スコア差=10(閾値内、40点)と=11(閾値外、0点)の境界、合計スコア=40点(未推薦)と=60点(推薦)の境界、全一致100点・不一致0点、スコア降順ソート |
+| P-2 | マッチング申請作成 | 未認証401、自分自身への申請400、存在しない宛先404、正常作成201、同一方向PENDING重複409、**逆方向は独立してPENDING併存しうる（設計確認、後述7-3）**、処理済み後の再申請は409にならない |
+| P-3 | 方向別一覧 | direction不正値/未指定は400（zod enum必須）、received/sentの絞り込みが正しいユーザー・件数を返す |
+| P-4 | 承認/却下の認可 | 宛先(`to_user_id`)本人以外403（申請者本人による自己承認も403）、宛先本人の承認200+Connection作成確認、却下200+Connection未作成確認、処理済み申請への再承認409、存在しないID404 |
+| P-5 | 掲示板 | 未認証401（GET/POST）、投稿作成201の全項目確認、content空文字400、全件を`created_at`降順で返す、0件時は空配列 |
+| P-6 | ルーティング回帰 | `POST /users`（未認証・新規登録）が401にならず201になること、`GET/PUT /users/{id}`が`usersMatchingRoutes`に飲み込まれず`usersRoutes`にフォールスルーして正常応答すること、`GET /users/recommend`自体は未認証401になること、`GET /users/me/match-requests`が`GET /users/:id`（`id="me"`）として誤解釈されないこと |
+
+境界値の設計上の注記: レコメンドの各加点（スコア差40点／エリア一致40点／目的一致20点）はいずれも20の倍数であり、到達しうる合計スコアは{0,20,40,60,80,100}のみで「ちょうど59点」は原理上存在しない。依頼にあった「合計スコアちょうど60・59」の境界検証は、実質的な境界である「推薦される最小値=60点」と「推薦されない最大値=40点」として実施した（`recommend.test.ts`冒頭コメントに明記）。
+
+### 7-3. DeveloperAgentの実装判断4点への評価
+
+依頼にあった4点の実装判断を、技術設計書・要件定義書と照合したうえで評価した。
+
+| # | 実装判断 | TesterAgentの評価 |
+|---|---|---|
+| 1 | レコメンド結果をスコア降順でソート | **問題なし**。技術設計書6-5章に順序の明記は無く、要件定義書3-1章も「60点以上で推薦」という閾値のみを規定し順序には触れていない。推薦の趣旨（スコアの高いユーザーほど優先的に見せる）に照らして降順ソートは合理的な判断であり、`recommend.test.ts`でソート順を確認した。逆順・ソート無しを積極的に要求する記述はどこにも無い |
+| 2 | マッチング申請の重複防止が方向別(`from_user_id`+`to_user_id`+`PENDING`)のみで逆方向は非チェック | **技術設計書の記載どおりであり実装はバグではないが、UX上の考慮不足の可能性ありとして要確認事項に記録する**。技術設計書5-2章のMatchRequestモデル定義は「`(from_user_id, to_user_id)` の組み合わせでPENDING状態は1件まで（重複申請防止）」と、あくまで方向付きの組(ordered pair)として制約を明記しており、実装（`matching.service.ts`の`createMatchRequest`）はこの文言に忠実である。したがって技術設計書との不整合ではない。一方、要件定義書3-1章・技術設計書6-5章のいずれにも「双方向から同時に申請が来た場合の挙動（自動マッチ扱いにする等）」の規定が無いため、AさんがBさんに申請している最中に、Bさんも独立してAさんに申請できてしまう（`matchRequests.test.ts`の「【設計確認】逆方向(to→from)の申請は独立して扱われ...」で現状挙動を確認済み）。承認処理自体はConnectionが冪等生成（`ensureConnection`）のため技術的な実害はないが、Androidクライアント側UIが「相手から既に申請が来ている」ことを考慮せずマッチング申請ボタンを表示し続ける可能性があり、ArchitectAgent/ProductManagerAgentに「双方向PENDING併存を許容する仕様でよいか」の確認を推奨する（差し戻しではなく設計確認事項） |
+| 3 | `GET /board`はページネーション無しで全件取得 | **問題なし**。技術設計書6-6章は`GET /board`を「既存踏襲」とのみ記載しページネーションに触れておらず、Androidクライアント`ApiService.getBoardPosts()`（今回のタスク範囲外のため確認のみ、変更はしていない）も引数を取らないことをコードで確認した。6-9章の管理者向け一覧APIのように明示的にページネーションが規定されているAPIとは異なり、`GET /board`について技術設計書側に矛盾する記載は無い。将来的に投稿数が増えた場合のパフォーマンス懸念は残るが、MVPの範囲としては妥当と判断する |
+| 4 | `usersMatchingRoutes`をルーター単位でなくルート単位で`authenticate`を付与 | **正しく機能していることを確認した**。仮に`usersMatchingRoutes.use(authenticate)`としていた場合、`usersMatchingRoutes`が`/users`に`usersRoutes`より先にマウントされる構成上、認証不要な`POST /users`（新規登録）へのリクエストもこのルーターを経由する際に認証チェックが先に走り401になってしまう。`usersRouting.test.ts`で（a）`POST /users`が未認証のまま201で成功すること、（b）`GET/PUT /users/{id}`が`usersMatchingRoutes`に飲み込まれず`usersRoutes`までフォールスルーして正常応答すること、（c）`GET /users/recommend`自体は未認証で401になること、の3点を実地に確認し、いずれも設計判断どおりに機能していた |
+
+### 7-4. 発見した不整合・バグ報告
+
+本Phase2実装について、明確なバグ（技術設計書・要件定義書との不整合で修正が必要なもの）は見つからなかった。7-3章の#2（マッチング申請の逆方向チェック非実装）のみ、バグではなく仕様確認事項として記録する（差し戻し必須ではない、ArchitectAgent/ProductManagerAgentへの確認を推奨）。
+
+### 7-5. テスト実行結果サマリ
+
+- 実行コマンド: `cd functions && npm test`（6-0章と同一。実行前にWindows環境特有のFirestore Emulator残留プロセスの終了が必要な場合がある、6-4-4章参照）
+- 実行環境: Node.js v22.16.0 / Java 17（`firebase-tools@13.35.1`固定、変更なし）
+- テストスイート: **10ファイル全て成功**（Phase1の6ファイル＋Phase2の新規4ファイル）
+- テストケース: **102件実行、成功102件、失敗0件**。`--json`出力（`jest --runInBand --json`）で1件ずつ正確にカウントした内訳は次のとおり: Phase1（変更なし・既存6ファイル、計64件）— `otp.test.ts` 7件、`verify.test.ts` 8件、`register.test.ts` 13件、`areas.test.ts` 5件、`getPut.test.ts` 16件、`joinRequests.test.ts` 15件／Phase2（新規4ファイル、計38件）— `recommend.test.ts` 9件、`matchRequests.test.ts` 18件、`board.test.ts` 6件、`usersRouting.test.ts` 5件
+  - 注記: 6-5章に記載の「Phase1 63件」は`test.each`のパラメータ展開を考慮しない目視カウントによる概数だった（実際は`getPut.test.ts`の`test.each`2ブロック分の展開により64件が正確な件数）。6-5章の記載自体は本タスクの範囲外のため修正していないが、本章では`--json`出力による正確な件数を採用した
+- **Phase1回帰確認**: `otp.test.ts`・`verify.test.ts`・`register.test.ts`・`areas.test.ts`・`getPut.test.ts`・`joinRequests.test.ts`の既存64件は変更を一切加えておらず、全件成功した。特に依頼で重点確認を求められた`POST /users`・`GET/PUT /users/{id}`（`usersMatchingRoutes`との`/users`プレフィックス共有によるルーティング変更の影響を受けうる箇所）は、既存テスト64件中の該当分がいずれも成功したことに加え、7-1章P-6の新規回帰専用テスト（`usersRouting.test.ts`）でも重点的に確認し、問題は見つからなかった
+- ビルド・Lint: `npm run build`（`tsc`）・`npm run lint`（`eslint src --ext .ts`）はいずれも成功
+- リグレッション: 上記のとおりPhase1・Androidクライアント側（1〜5章）ともに影響なし（`app/`配下は変更していない）
+
+### 7-6. まとめ
+
+サーバーサイドPhase2実装（おすすめユーザー・マッチング申請・掲示板）について、技術設計書6-5章・6-6章、要件定義書3-1章のレコメンドロジックとの整合性を38件の新規Firestore Emulator統合テスト（既存64件と合わせ計102件）で検証した。依頼にあった4点の実装判断（レコメンド降順ソート、マッチング申請重複防止の方向別チェック、掲示板ページネーション省略、`/users`プレフィックス共有時のルート単位認証）は、いずれも技術設計書・要件定義書との矛盾は無く、うち1点（マッチング申請の逆方向重複非チェック）のみ、技術設計書の文言自体には忠実であるものの双方向PENDING併存というUX上の考慮点をArchitectAgent/ProductManagerAgentへの確認事項として記録した。新たなバグは発見されず、Phase1の既存63件のテストも全て成功しリグレッションは確認されなかった。
