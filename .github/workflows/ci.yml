@@ -1,0 +1,116 @@
+name: CI
+
+# Androidクライアント（JVMユニットテスト）とサーバーサイド（Firestore Emulator統合テスト）を
+# push/PRのたびに自動検証する。ローカルでの検証手順は docs/test-plan.md 0章・6-0章と同じ。
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# 同一ブランチで新しいpushがあったら古い実行は打ち切る
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    name: Android（ユニットテスト・デバッグビルド）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: JDK 17 をセットアップ
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Gradle をセットアップ（依存関係キャッシュ込み）
+        uses: gradle/actions/setup-gradle@v4
+
+      # app/google-services.json は環境ごとに配布する運用で .gitignore 済み（リポジトリに存在しない）。
+      # google-services プラグインはファイルが無いとビルドが失敗するため、CIではダミーを生成する。
+      # 実際のFirebase接続はテスト対象外（ユニットテストはFakeリポジトリのみを使う）なので値は無効で構わない。
+      - name: google-services.json のプレースホルダを生成
+        run: |
+          cat > app/google-services.json <<'JSON'
+          {
+            "project_info": {
+              "project_number": "000000000000",
+              "project_id": "ci-placeholder",
+              "storage_bucket": "ci-placeholder.appspot.com"
+            },
+            "client": [
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:000000000000:android:0000000000000000000000",
+                  "android_client_info": {
+                    "package_name": "com.golfmatch.app"
+                  }
+                },
+                "oauth_client": [],
+                "api_key": [
+                  {
+                    "current_key": "AIzaSyCIplaceholderplaceholderplaceholder0"
+                  }
+                ],
+                "services": {
+                  "appinvite_service": {
+                    "other_platform_oauth_client": []
+                  }
+                }
+              }
+            ],
+            "configuration_version": "1"
+          }
+          JSON
+
+      - name: ユニットテスト
+        run: ./gradlew :app:testDebugUnitTest --no-daemon
+
+      - name: デバッグビルド
+        run: ./gradlew :app:assembleDebug --no-daemon
+
+      - name: テストレポートを保存（失敗時の調査用）
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-test-report
+          path: app/build/reports/tests/testDebugUnitTest
+          if-no-files-found: ignore
+
+  functions:
+    name: Functions（Lint・型チェック・Emulator統合テスト）
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: functions
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Node.js 22 をセットアップ
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+
+      # `npm test` は firebase emulators:exec で Firestore Emulator を起動する（JVM必須）
+      - name: JDK 17 をセットアップ（Firestore Emulator用）
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: 依存関係をインストール
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: 型チェック（tsc）
+        run: npm run build
+
+      - name: 統合テスト（Firestore Emulator）
+        run: npm test

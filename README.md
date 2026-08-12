@@ -96,6 +96,18 @@ sdk.dir=<Android SDKのパス>
 ./gradlew :app:assembleDebug
 ```
 
+## CI（GitHub Actions）
+
+`.github/workflows/ci.yml` により、`main`へのpush・全PR・手動実行（workflow_dispatch）で以下が自動実行される。
+
+| ジョブ | 内容 |
+|---|---|
+| Android | `:app:testDebugUnitTest`（JVMユニットテスト）→ `:app:assembleDebug`。失敗時はテストレポートをArtifactとして保存 |
+| Functions | `npm run lint` → `npm run build`（tsc）→ `npm test`（Firestore Emulatorに対する統合テスト） |
+
+`app/google-services.json` はコミット対象外のためCI上には存在しない。google-servicesプラグインがファイル欠如で失敗するため、
+CIではダミーのプレースホルダーをワークフロー内で生成している（ユニットテストはFakeリポジトリのみを使い実際のFirebase接続を行わないため、値は無効で問題ない）。
+
 ## 主要な実装判断メモ（雛形構築フェーズ）
 
 - **ID型**: Firestoreのドキュメント運用を踏まえ、技術設計書のUUID型フィールドはすべて `String` として実装した。
