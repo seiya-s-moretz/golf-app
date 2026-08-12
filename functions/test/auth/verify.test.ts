@@ -59,7 +59,7 @@ describe("POST /auth/phone/verify", () => {
     expect(res.body.access_token).toBeUndefined();
   });
 
-  test("登録済みの電話番号を正しいOTPで検証するとis_new_user=falseかつuser・access_tokenが返る（再ログイン、ADR-0006）", async () => {
+  test("登録済みの電話番号を正しいOTPで検証するとis_new_user=falseかつsession.user・session.access_tokenが返る（再ログイン、ADR-0006）", async () => {
     const registered = await registerNewUser(app);
 
     // registerNewUser内で直近にOTPを発行済みのため、60秒レート制限（otp.test.ts参照）に抵触しないよう
@@ -80,13 +80,13 @@ describe("POST /auth/phone/verify", () => {
       .expect(200);
 
     expect(res.body.is_new_user).toBe(false);
-    expect(res.body.user.user_id).toBe(registered.userId);
-    expect(typeof res.body.access_token).toBe("string");
+    expect(res.body.session.user.user_id).toBe(registered.userId);
+    expect(typeof res.body.session.access_token).toBe("string");
     expect(res.body.registration_token).toBeUndefined();
   });
 
   /**
-   * 【重大バグ・要差し戻し】is_new_user=false時のレスポンス形式がAndroidクライアントの契約と一致しない。
+   * 【修正確認】is_new_user=false時、user・access_tokenがADR-0006どおりsessionにネストされて返る。
    *
    * ADR-0006「実装への影響」表（AuthDto.kt行）は、`VerifyOtpResponseDto`が
    * `session: AuthSessionResponseDto?`（`is_new_user=false`時のみ非null。`AuthSessionResponseDto`は
@@ -96,18 +96,12 @@ describe("POST /auth/phone/verify", () => {
    * `AuthMapper.kt`の`VerifyOtpResponseDto.toDomain()`は`is_new_user=false`時に
    * `checkNotNull(session)`でsessionフィールドの存在を必須としている。
    *
-   * しかし本APIの実装（`auth.service.ts`の`verifyPhoneOtp()`）は`user`・`access_token`を
-   * `session`にネストさせず、トップレベルのフィールドとして返している。そのためAndroidクライアントが
-   * 実際にこのレスポンスをパースすると`session`は常にnullとなり、`checkNotNull`が例外を送出する
-   * ＝**既存ユーザーの再ログインがクライアント側で必ず失敗する**（技術設計書6-1章の文面自体は
-   * `user`・`access_token`の記載のみでネスト構造を明示していないが、ADR-0006とAndroid実装済みDTOが
-   * 優先されるべき確定した契約である）。
-   *
-   * このテストは現状の（バグのある）レスポンス形式をそのまま再現するものであり、Pass = バグ挙動が
-   * 現状のまま存在することを確認する目的（`docs/test-plan.md` 差し戻し事項参照）。DeveloperAgent側で
-   * `{ is_new_user: false, session: { user, access_token } }`という形にレスポンスを修正する必要がある。
+   * 以前は`user`・`access_token`が`session`にネストされずトップレベルのフィールドとして返っており
+   * （`docs/test-plan.md` 6-4-1章参照）、Androidクライアント側で`checkNotNull(session)`が例外を
+   * 送出する重大バグだった。`verifyPhoneOtp()`の修正により`session`にネストされるようになったことを
+   * 確認する。
    */
-  test("【バグ再現】is_new_user=false時、user・access_tokenがsessionにネストされずトップレベルに返る（Androidクライアント契約違反）", async () => {
+  test("is_new_user=false時、user・access_tokenがADR-0006どおりsessionにネストされて返る（Androidクライアント契約準拠）", async () => {
     const registered = await registerNewUser(app);
     const verificationRef = db.collection("phoneVerifications").doc(sha256Hex(registered.phoneNumber));
     const verificationSnap = await verificationRef.get();
@@ -122,11 +116,13 @@ describe("POST /auth/phone/verify", () => {
       .send({ phone_number: registered.phoneNumber, otp_code: otpCode })
       .expect(200);
 
-    // 本来Androidクライアントが期待する構造（ADR-0006・AuthDto.kt）
-    expect(res.body.session).toBeUndefined(); // 期待値: { user, access_token } を持つオブジェクトが入っているべき
-    // 実際の（バグのある）構造
-    expect(res.body.user).toBeDefined();
-    expect(res.body.access_token).toBeDefined();
+    // ADR-0006・AuthDto.ktが期待する構造
+    expect(res.body.session).toBeDefined();
+    expect(res.body.session.user.user_id).toBe(registered.userId);
+    expect(typeof res.body.session.access_token).toBe("string");
+    // トップレベルには user・access_token を置かない
+    expect(res.body.user).toBeUndefined();
+    expect(res.body.access_token).toBeUndefined();
   });
 
   test("試行回数の上限（5回）を超えて不一致OTPを送るとFAILED状態になりその後は正しいOTPでも400を返す", async () => {

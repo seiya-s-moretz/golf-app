@@ -45,27 +45,33 @@ describe("GET /users/{id}", () => {
   });
 
   /**
-   * 【要確認・PII露出の懸念】他人のプロフィール取得時、生の電話番号(phone_number)がそのまま返っている。
+   * 【修正確認・PII保護】他人のプロフィール取得時は生の電話番号(phone_number)を含めない。
    *
-   * 技術設計書6-3章の`GET /users/{id}`の記述は「レスポンスに area, phone_verified を追加」という
-   * 差分表現のみで、`phone_number`自体を追加するとは明記していない（`phone_verified`という真偽値だけを
-   * 追加する意図だった可能性がある）。一方5-1章のUser Entity定義は`phone_number`を新規フィールドとして
-   * 挙げているため、「Userの論理モデル全体をそのまま返す」という12-0章前提1の解釈に立てば現状の実装は
-   * 矛盾しない、とも解釈できる。いずれの解釈にせよ、`GetUserUseCase`（Androidクライアント）は
-   * `BoardViewModel`・`MessageThreadViewModel`から「他人」のプロフィール取得にも使われており、
-   * 本番運用時には任意の認証済みユーザーが掲示板投稿者・メッセージ相手等の生電話番号を閲覧できてしまう
-   * ことを意味する。実装はバグではなく設計書の記述通りだが、PII露出のリスクとしてArchitectAgentに
-   * 判断を仰ぐべき事項として記録する（`docs/test-plan.md`参照）。このテストは現状の実装が
-   * phone_numberを返すことを明文化するもの。
+   * PRD（`docs/要件定義書.md`5章「非機能要件」）が「個人情報は第三者に不必要に開示しない設計とする」
+   * と明記していること、`GetUserUseCase`（Androidクライアント）が`BoardViewModel`・
+   * `MessageThreadViewModel`から「他人」のプロフィール取得にも使われることを踏まえ、`toUserResponse()`
+   * を修正し、リクエストしたユーザー本人が対象ユーザー自身の場合のみ`phone_number`を含めるようにした
+   * （`docs/test-plan.md` 6-4-2章参照）。`phone_verified`（真偽値）は電話番号自体ではないため、
+   * 他人閲覧時も引き続き含める。
    */
-  test("【要確認】他人のプロフィール取得時にもphone_number（生の電話番号）が含まれる", async () => {
+  test("他人のプロフィール取得時はphone_number（生の電話番号）が含まれない", async () => {
     const viewer = await registerNewUser(app);
     const target = await registerNewUser(app);
     const res = await request(app)
       .get(`/users/${target.userId}`)
       .set(...authHeader(viewer.accessToken))
       .expect(200);
-    expect(res.body.phone_number).toBe(target.phoneNumber);
+    expect(res.body.phone_number).toBeUndefined();
+    expect(res.body.phone_verified).toBe(true);
+  });
+
+  test("本人によるプロフィール取得時はphone_number（生の電話番号）が含まれる", async () => {
+    const registered = await registerNewUser(app);
+    const res = await request(app)
+      .get(`/users/${registered.userId}`)
+      .set(...authHeader(registered.accessToken))
+      .expect(200);
+    expect(res.body.phone_number).toBe(registered.phoneNumber);
   });
 
   test("存在しないuser_idは404 NOT_FOUNDを返す", async () => {

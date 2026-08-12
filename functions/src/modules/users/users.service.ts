@@ -13,7 +13,7 @@ export interface UserResponse {
   average_score: number;
   purpose: Purpose;
   introduction: string;
-  phone_number: string;
+  phone_number?: string;
   phone_verified: boolean;
   phone_verified_at: string | null;
   status: string;
@@ -21,8 +21,15 @@ export interface UserResponse {
   created_at: string;
 }
 
-/** UserDoc → APIレスポンス形（技術設計書6-3章。`area`はAreaMasterの参照展開）。 */
-export async function toUserResponse(userDoc: UserDoc): Promise<UserResponse> {
+/**
+ * UserDoc → APIレスポンス形（技術設計書6-3章。`area`はAreaMasterの参照展開）。
+ *
+ * `phone_number`（生の電話番号）はPII保護のため、閲覧者が対象ユーザー本人の場合のみ含める。
+ * `viewerUserId`を省略した場合（新規登録直後・OTP再ログイン・本人によるプロフィール更新など、
+ * レスポンスの受け手が常に本人であることが呼び出し元で保証されている場面）は本人閲覧として扱う。
+ * `phone_verified`（真偽値）は電話番号自体ではないため、閲覧者を問わず常に含める。
+ */
+export async function toUserResponse(userDoc: UserDoc, viewerUserId?: string): Promise<UserResponse> {
   const areaDoc = await getAreaById(userDoc.areaId);
   if (!areaDoc) {
     // areaは業務上必須参照のため、欠落はサーバー内部の不整合として扱う（レスポンスからのarea欠落は許容しない）
@@ -32,6 +39,7 @@ export async function toUserResponse(userDoc: UserDoc): Promise<UserResponse> {
       `ユーザー ${userDoc.userId} が参照するエリア(${userDoc.areaId})が見つかりません`
     );
   }
+  const isSelf = viewerUserId === undefined || viewerUserId === userDoc.userId;
   return {
     user_id: userDoc.userId,
     name: userDoc.name,
@@ -42,7 +50,7 @@ export async function toUserResponse(userDoc: UserDoc): Promise<UserResponse> {
     average_score: userDoc.averageScore,
     purpose: userDoc.purpose,
     introduction: userDoc.introduction,
-    phone_number: userDoc.phoneNumber,
+    ...(isSelf ? { phone_number: userDoc.phoneNumber } : {}),
     phone_verified: userDoc.phoneVerified,
     phone_verified_at: userDoc.phoneVerifiedAt ? userDoc.phoneVerifiedAt.toDate().toISOString() : null,
     status: userDoc.status,

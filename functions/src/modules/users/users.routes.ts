@@ -22,12 +22,14 @@ usersRoutes.post(
 );
 
 // GET /users/{id}（技術設計書6-3章）
+// phone_number（生の電話番号）はPII保護のため、リクエスト者本人が対象ユーザー自身の場合のみ含める
+// （users.service.ts toUserResponseのviewerUserId参照）。
 usersRoutes.get(
   "/:id",
   authenticate,
   asyncHandler(async (req, res) => {
     const userDoc = await getUserById(req.params.id);
-    res.json(await toUserResponse(userDoc));
+    res.json(await toUserResponse(userDoc, req.currentUser!.userId));
   })
 );
 

@@ -67,10 +67,14 @@ export async function requestPhoneOtp(phoneNumber: string): Promise<void> {
   await getSmsSender().send(phoneNumber, `【ゴルフマッチング】確認コード: ${otpCode}（5分間有効）`);
 }
 
+export interface VerifyPhoneOtpSession {
+  user: UserResponse;
+  access_token: string;
+}
+
 export interface VerifyPhoneOtpResult {
   is_new_user: boolean;
-  user?: UserResponse;
-  access_token?: string;
+  session?: VerifyPhoneOtpSession;
   registration_token?: string;
 }
 
@@ -116,8 +120,10 @@ export async function verifyPhoneOtp(phoneNumber: string, otpCode: string): Prom
     const accessToken = await createSession(userDoc.userId);
     return {
       is_new_user: false,
-      user: await toUserResponse(userDoc),
-      access_token: accessToken,
+      session: {
+        user: await toUserResponse(userDoc),
+        access_token: accessToken,
+      },
     };
   }
 
