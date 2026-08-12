@@ -106,3 +106,26 @@ export async function registerNewUser(app: Express, overrides: RegisterNewUserOv
 export function authHeader(accessToken: string): [string, string] {
   return ["Authorization", `Bearer ${accessToken}`];
 }
+
+/**
+ * `User.isAdmin`をDBへ直接書き込むテストヘルパー（ADR-0007のとおり`is_admin`付与APIはMVPでは存在しないため、
+ * 管理者アカウントを用意するにはDB直接操作しかない。運用上の想定と同じ操作をテストでも行う）。
+ */
+export async function setAdmin(userId: string, isAdmin = true): Promise<void> {
+  await db.collection("users").doc(userId).update({ isAdmin });
+}
+
+/**
+ * `POST /users/{id}/match-requests` → `POST /match-requests/{id}/approve` の一連のHTTPフローを実際に叩き、
+ * 2ユーザー間に`Connection`を成立させるテストヘルパー（メッセージ機能のテスト前提を作るため）。
+ */
+export async function establishConnection(app: Express, userA: RegisteredUser, userB: RegisteredUser): Promise<void> {
+  const created = await request(app)
+    .post(`/users/${userB.userId}/match-requests`)
+    .set(...authHeader(userA.accessToken))
+    .expect(201);
+  await request(app)
+    .post(`/match-requests/${created.body.match_request_id}/approve`)
+    .set(...authHeader(userB.accessToken))
+    .expect(200);
+}
