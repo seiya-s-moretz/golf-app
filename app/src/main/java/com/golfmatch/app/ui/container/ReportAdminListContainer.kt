@@ -25,6 +25,7 @@ fun ReportAdminListContainer(
         onStatusFilterSelected = { viewModel.onStatusFilterSelected(it) },
         onReportClick = { summary ->
             navController.navigate(Route.ReportAdminDetail.createRoute(summary.report.reportId))
-        }
+        },
+        onLoadMore = { viewModel.loadMore() }
     )
 }

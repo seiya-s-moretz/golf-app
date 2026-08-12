@@ -12,6 +12,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -19,7 +20,12 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
@@ -40,12 +46,15 @@ import kotlinx.datetime.toLocalDateTime
  *
  * `User.is_admin=true`の運営メンバーのみマイページから到達できる（一般ユーザーには存在が見えない導線）。
  * ステータスごとの簡易タブで絞り込み、行タップで通報管理詳細画面へ遷移する。
+ * 一覧はサーバーのカーソル型ページネーション（技術設計書6-9章 `before`/`limit`）に従い、
+ * 末尾に近づいたら[onLoadMore]で次ページを追加読み込みする。
  */
 @Composable
 fun ReportAdminListScreen(
     uiState: ReportAdminListUiState,
     onStatusFilterSelected: (ReportStatus?) -> Unit = {},
-    onReportClick: (ReportSummary) -> Unit = {}
+    onReportClick: (ReportSummary) -> Unit = {},
+    onLoadMore: () -> Unit = {}
 ) {
     Scaffold { innerPadding ->
         Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
@@ -54,7 +63,7 @@ fun ReportAdminListScreen(
                 uiState.isLoading -> LoadingContent()
                 uiState.errorMessage != null && uiState.reports.isEmpty() -> ErrorContent(uiState.errorMessage)
                 uiState.reports.isEmpty() -> EmptyContent()
-                else -> ReportList(uiState = uiState, onReportClick = onReportClick)
+                else -> ReportList(uiState = uiState, onReportClick = onReportClick, onLoadMore = onLoadMore)
             }
         }
     }
@@ -108,11 +117,27 @@ private fun EmptyContent() {
     }
 }
 
+/** リスト末尾から何件手前で次ページの読み込みを開始するか */
+private const val LOAD_MORE_THRESHOLD = 3
+
 @Composable
 private fun ReportList(
     uiState: ReportAdminListUiState,
-    onReportClick: (ReportSummary) -> Unit
+    onReportClick: (ReportSummary) -> Unit,
+    onLoadMore: () -> Unit
 ) {
+    val listState = rememberLazyListState()
+    val shouldLoadMore by remember(uiState.reports.size, uiState.hasMore) {
+        derivedStateOf {
+            if (!uiState.hasMore) return@derivedStateOf false
+            val lastVisibleIndex = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: return@derivedStateOf false
+            lastVisibleIndex >= uiState.reports.size - LOAD_MORE_THRESHOLD
+        }
+    }
+    LaunchedEffect(shouldLoadMore) {
+        if (shouldLoadMore) onLoadMore()
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
         if (uiState.errorMessage != null) {
             Text(
@@ -122,6 +147,7 @@ private fun ReportList(
             )
         }
         LazyColumn(
+            state = listState,
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(16.dp)
         ) {
@@ -132,7 +158,27 @@ private fun ReportList(
                     onClick = { onReportClick(summary) }
                 )
             }
+            if (uiState.isLoadingMore) {
+                item(key = "loading-more") { LoadMoreIndicator() }
+            } else if (uiState.hasMore && uiState.errorMessage != null) {
+                // 追加読み込みが失敗すると末尾到達では再発火しないため、明示的な再試行導線を出す
+                item(key = "load-more-retry") { LoadMoreRetryButton(onClick = onLoadMore) }
+            }
         }
+    }
+}
+
+@Composable
+private fun LoadMoreIndicator() {
+    Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+        CircularProgressIndicator()
+    }
+}
+
+@Composable
+private fun LoadMoreRetryButton(onClick: () -> Unit) {
+    Box(modifier = Modifier.fillMaxWidth().padding(8.dp), contentAlignment = Alignment.Center) {
+        TextButton(onClick = onClick) { Text("再試行") }
     }
 }
 

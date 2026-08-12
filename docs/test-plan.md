@@ -321,10 +321,16 @@ DeveloperAgentは`ReportStatus`リネームに伴い`ReportMapperTest.kt`・`Ent
 - 影響: 通報管理画面はMVPでは「状態遷移順序の強制を行わない」設計（ADR-0007）であり、2回目の呼び出しが直ちにデータ不整合を起こすわけではないが、ネットワーク遅延時にボタン連打すると意図せず`handled_by_user_id`/`handled_at`が2回上書きされる、またはUIが最終的にどちらの呼び出し結果を表示するか不定になる可能性がある
 - 差し戻し内容（提案）: `save()`冒頭に`if (state.isUpdating) return`を追加し、他画面のガードパターンと統一する
 
-### 4-5. 【要確認・差し戻し】管理者向け一覧API `GET /admin/reports` のページネーション未実装
+### 4-5. 【解消済み】管理者向け一覧API `GET /admin/reports` のページネーション未実装
 
 - 対象コード: `app/src/main/java/com/golfmatch/app/data/api/ApiService.kt`（`getAdminReports(status: String?)`）、`ReportRepository.getAdminReports(statusFilter: ReportStatus?)`、`GetAdminReportsUseCase`
 - 2-6-3章E-2の判断のとおり、技術設計書6-9章は`before`/`limit`によるページネーションを明記しているが実装には存在しない。ArchitectAgent/DeveloperAgentにて「技術設計書どおりページネーションを実装する」か「MVPでは意図的に省略しADR-0007にその旨を追記する」かの決定を依頼したい
+- **2026-08-13 解消**: 技術設計書6-9章どおり実装する方針を採用。API/Repository/UseCase層には`before`/`limit`が追加済みであったが、`ReportAdminListViewModel`・`ReportAdminListScreen`が常に先頭ページのみを取得しており未追随だったため、以下を実装した。
+  - `ReportAdminListUiState`に`isLoadingMore`/`hasMore`を追加し、`ReportAdminListViewModel.loadMore()`が末尾要素の`created_at`をカーソルとして次ページを追加取得する（`PAGE_SIZE=20`はサーバーの`DEFAULT_PAGE_LIMIT`と同値）
+  - サーバーは`has_more`相当のフラグを返さないため、「取得件数がページサイズと同じなら続きがあるとみなす」推定で`hasMore`を決める
+  - フィルタ切り替えと追加読み込みの競合対策として世代番号（`loadGeneration`）で古い応答を破棄する
+  - `ReportAdminListScreen`はリスト末尾3件手前で`onLoadMore`を発火し、読み込み中はフッターにインジケータ、追加読み込み失敗時は再試行ボタンを表示する
+  - 検証: `ReportAdminListViewModelTest`（新規6件）で、初回取得のカーソル引数・カーソル指定での追記・PAGE_SIZE未満での打ち切り・多重発火ガード・失敗時の`hasMore`維持・フィルタ切替時の古い応答破棄を確認。`./gradlew :app:testDebugUnitTest`は110件成功、0失敗
 
 ### 4-6. 【軽微・参考】MessageThreadScreenの自分/相手判定ロジックがViewModelではなくCompose Screen側にある
 
