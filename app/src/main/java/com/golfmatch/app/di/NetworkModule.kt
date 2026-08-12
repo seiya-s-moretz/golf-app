@@ -33,10 +33,10 @@ import javax.inject.Singleton
 object NetworkModule {
 
     /**
-     * Cloud FunctionsのベースURL。google-services.json配置・Functionsデプロイ完了後、
-     * 実際のプロジェクトのHTTPSトリガーURLに置き換える（現時点ではプレースホルダー）。
+     * Cloud FunctionsのベースURL（`functions/src/index.ts`の単一HTTPS関数`api`、リージョンは
+     * `asia-northeast1`。技術設計書12-1章）。
      */
-    private const val BASE_URL = "https://asia-northeast1-golf-app-placeholder.cloudfunctions.net/api/"
+    private const val BASE_URL = "https://asia-northeast1-seiya-app-818a4.cloudfunctions.net/api/"
 
     @Provides
     @Singleton
