@@ -123,3 +123,25 @@ export interface ConnectionDoc {
   unreadCountForUserA?: number;
   unreadCountForUserB?: number;
 }
+
+// ---- matchRequests/{matchRequestId} ----
+
+export type MatchRequestStatus = "PENDING" | "ACCEPTED" | "REJECTED";
+
+export interface MatchRequestDoc {
+  matchRequestId: string;
+  fromUserId: string;
+  toUserId: string;
+  status: MatchRequestStatus;
+  createdAt: Timestamp;
+  respondedAt: Timestamp | null;
+}
+
+// ---- boardPosts/{postId} ----
+
+export interface BoardPostDoc {
+  postId: string;
+  userId: string;
+  content: string;
+  createdAt: Timestamp;
+}

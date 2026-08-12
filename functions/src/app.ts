@@ -2,6 +2,8 @@ import express from "express";
 import { errorHandler } from "./middleware/errorHandler";
 import { areasRoutes } from "./modules/areas/areas.routes";
 import { authRoutes } from "./modules/auth/auth.routes";
+import { boardRoutes } from "./modules/board/board.routes";
+import { matchRequestsRoutes, usersMatchingRoutes } from "./modules/matching/matching.routes";
 import { roundEventsRoutes } from "./modules/roundEvents/roundEvents.routes";
 import { usersRoutes } from "./modules/users/users.routes";
 
@@ -16,8 +18,14 @@ export function createApp(): express.Express {
 
   app.use("/auth", authRoutes);
   app.use("/areas", areasRoutes);
+  // usersMatchingRoutes（GET /users/recommend, GET /users/me/match-requests, POST /users/{id}/match-requests）は
+  // Phase1のusersRoutes（変更禁止）が持つGET /users/:idとのパス衝突を避けるため、usersRoutesより先にマウントする
+  // （技術設計書6-5章、matching.routes.ts参照）。
+  app.use("/users", usersMatchingRoutes);
   app.use("/users", usersRoutes);
   app.use("/round-events", roundEventsRoutes);
+  app.use("/match-requests", matchRequestsRoutes);
+  app.use("/board", boardRoutes);
 
   app.use((req, res) => {
     res.status(404).json({
