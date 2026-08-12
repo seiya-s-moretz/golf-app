@@ -3,7 +3,11 @@ import { errorHandler } from "./middleware/errorHandler";
 import { areasRoutes } from "./modules/areas/areas.routes";
 import { authRoutes } from "./modules/auth/auth.routes";
 import { boardRoutes } from "./modules/board/board.routes";
+import { usersBlockRoutes } from "./modules/blocks/blocks.routes";
 import { matchRequestsRoutes, usersMatchingRoutes } from "./modules/matching/matching.routes";
+import { conversationsRoutes } from "./modules/messaging/messaging.routes";
+import { adminReportsRoutes } from "./modules/reports/admin/adminReports.routes";
+import { reportsRoutes } from "./modules/reports/reports.routes";
 import { roundEventsRoutes } from "./modules/roundEvents/roundEvents.routes";
 import { usersRoutes } from "./modules/users/users.routes";
 
@@ -18,14 +22,19 @@ export function createApp(): express.Express {
 
   app.use("/auth", authRoutes);
   app.use("/areas", areasRoutes);
-  // usersMatchingRoutes（GET /users/recommend, GET /users/me/match-requests, POST /users/{id}/match-requests）は
+  // usersMatchingRoutes（GET /users/recommend, GET /users/me/match-requests, POST /users/{id}/match-requests）・
+  // usersBlockRoutes（GET /users/me/blocks, POST/DELETE /users/{id}/block）は
   // Phase1のusersRoutes（変更禁止）が持つGET /users/:idとのパス衝突を避けるため、usersRoutesより先にマウントする
-  // （技術設計書6-5章、matching.routes.ts参照）。
+  // （技術設計書6-5章・6-8章、matching.routes.ts・blocks.routes.ts参照）。
   app.use("/users", usersMatchingRoutes);
+  app.use("/users", usersBlockRoutes);
   app.use("/users", usersRoutes);
   app.use("/round-events", roundEventsRoutes);
   app.use("/match-requests", matchRequestsRoutes);
   app.use("/board", boardRoutes);
+  app.use("/conversations", conversationsRoutes);
+  app.use("/reports", reportsRoutes);
+  app.use("/admin/reports", adminReportsRoutes);
 
   app.use((req, res) => {
     res.status(404).json({

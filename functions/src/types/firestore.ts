@@ -117,9 +117,17 @@ export interface ConnectionDoc {
   sourceType: ConnectionSourceType;
   sourceId: string;
   createdAt: Timestamp;
-  /** 会話プレビュー用の非正規化フィールド（Phase3のメッセージ機能が書き込む。技術設計書12-2-3章）。 */
+  /**
+   * 会話プレビュー用の非正規化フィールド（Phase3のメッセージ機能が書き込む。技術設計書12-2-3章）。
+   * `GET /conversations`が`Message`本体を都度クエリせずに一覧を構築できるよう、最新メッセージの
+   * 内容（`lastMessagePreview`は要約ではなく本文全体を保持する。5-2章の目安上限500文字であり
+   * 別途truncateする実益が薄いため）・送信者・既読状態までここに複製する（DeveloperAgent実装判断）。
+   */
   lastMessageAt?: Timestamp;
   lastMessagePreview?: string;
+  lastMessageId?: string;
+  lastMessageSenderId?: string;
+  lastMessageReadAt?: Timestamp | null;
   unreadCountForUserA?: number;
   unreadCountForUserB?: number;
 }
@@ -143,5 +151,52 @@ export interface BoardPostDoc {
   postId: string;
   userId: string;
   content: string;
+  createdAt: Timestamp;
+}
+
+// ---- messages/{messageId} ----[Phase3]
+
+export interface MessageDoc {
+  messageId: string;
+  /**
+   * Connectionと同じ正規化ペアキー（内部専用フィールド。技術設計書12-2-3章）。
+   * `GET /conversations/{partnerId}/messages`のクエリ（`pairId==X order by createdAt desc`）に用いる。
+   * APIレスポンスには含めない。
+   */
+  pairId: string;
+  userAId: string;
+  userBId: string;
+  senderId: string;
+  content: string;
+  createdAt: Timestamp;
+  readAt: Timestamp | null;
+}
+
+// ---- reports/{reportId} ----[Phase3]
+
+export type ReportTargetType = "USER" | "BOARD_POST";
+export type ReportReasonCategory = "SPAM" | "DATING_SOLICITATION" | "HARASSMENT" | "INAPPROPRIATE_CONTENT" | "OTHER";
+export type ReportStatus = "PENDING" | "REVIEWING" | "RESOLVED" | "DISMISSED";
+
+export interface ReportDoc {
+  reportId: string;
+  reporterUserId: string;
+  targetType: ReportTargetType;
+  targetId: string;
+  reasonCategory: ReportReasonCategory;
+  reasonText: string | null;
+  status: ReportStatus;
+  createdAt: Timestamp;
+  handledByUserId: string | null;
+  handledAt: Timestamp | null;
+  handlingMemo: string | null;
+}
+
+// ---- blocks/{blockerUserId}_{blockedUserId} ----[Phase3]
+
+export interface BlockDoc {
+  blockId: string;
+  blockerUserId: string;
+  blockedUserId: string;
   createdAt: Timestamp;
 }

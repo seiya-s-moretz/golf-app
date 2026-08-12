@@ -9,11 +9,11 @@ export const boardRoutes = Router();
 // 技術設計書6章冒頭の方針どおり、board配下は全エンドポイント認証必須（特記の無いものは認証必須）。
 boardRoutes.use(authenticate);
 
-// GET /board（技術設計書6-6章）
+// GET /board（技術設計書6-6章。ブロック除外フィルタはPhase3で追加）
 boardRoutes.get(
   "/",
-  asyncHandler(async (_req, res) => {
-    res.json(await listBoardPosts());
+  asyncHandler(async (req, res) => {
+    res.json(await listBoardPosts(req.currentUser!.userId));
   })
 );
 

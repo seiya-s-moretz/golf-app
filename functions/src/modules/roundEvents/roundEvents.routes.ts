@@ -17,11 +17,11 @@ export const roundEventsRoutes = Router();
 // 技術設計書6章冒頭の方針どおり、round-events配下は全エンドポイント認証必須（特記の無いものは認証必須）。
 roundEventsRoutes.use(authenticate);
 
-// GET /round-events（技術設計書6-4章）
+// GET /round-events（技術設計書6-4章。ブロック除外フィルタはPhase3で追加）
 roundEventsRoutes.get(
   "/",
-  asyncHandler(async (_req, res) => {
-    res.json(await listRoundEvents());
+  asyncHandler(async (req, res) => {
+    res.json(await listRoundEvents(req.currentUser!.userId));
   })
 );
 

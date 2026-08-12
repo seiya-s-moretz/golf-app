@@ -2,6 +2,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import { db } from "../../config/firebaseAdmin";
 import { AppError } from "../../lib/AppError";
 import { newId } from "../../lib/ids";
+import { assertNotBlocked, excludeBlockedUsers } from "../blocks/blocks.service";
 import { ensureConnection } from "../connections/connections.service";
 import type { RoundEventDoc, RoundJoinRequestDoc, RoundJoinRequestStatus } from "../../types/firestore";
 
@@ -51,11 +52,13 @@ function toJoinRequestResponse(doc: RoundJoinRequestDoc): RoundJoinRequestRespon
 
 /**
  * `GET /round-events`（技術設計書6-4章）。
- * ブロック関係にある作成者の募集を除外するフィルタはPhase3で追加する（13-3章の依存関係）。
+ * ブロック関係（双方向）にある作成者の募集をレスポンスから除外する（Phase3で追加。技術設計書5-2章・13-3章）。
  */
-export async function listRoundEvents(): Promise<RoundEventResponse[]> {
+export async function listRoundEvents(requesterUserId: string): Promise<RoundEventResponse[]> {
   const snap = await db.collection("roundEvents").orderBy("createdAt", "desc").get();
-  return snap.docs.map((d) => toRoundEventResponse(d.data() as RoundEventDoc));
+  const events = snap.docs.map((d) => d.data() as RoundEventDoc);
+  const visibleEvents = await excludeBlockedUsers(events, requesterUserId, (e) => e.createdBy);
+  return visibleEvents.map(toRoundEventResponse);
 }
 
 export interface CreateRoundEventInput {
@@ -102,12 +105,17 @@ export async function getRoundEvent(eventId: string): Promise<RoundEventResponse
   return toRoundEventResponse(await getRoundEventDocOrThrow(eventId));
 }
 
-/** `POST /round-events/{id}/join-requests`（技術設計書6-4章）。 */
+/**
+ * `POST /round-events/{id}/join-requests`（技術設計書6-4章）。
+ * 主催者とブロック関係にある場合はサーバー側で拒否する（Phase3で追加。技術設計書5-2章）。
+ */
 export async function applyRoundJoin(eventId: string, userId: string): Promise<RoundJoinRequestResponse> {
   const eventRef = db.collection("roundEvents").doc(eventId);
   const eventSnap = await eventRef.get();
   if (!eventSnap.exists) throw new AppError(404, "NOT_FOUND", "ラウンド募集が見つかりません");
   const event = eventSnap.data() as RoundEventDoc;
+
+  await assertNotBlocked(userId, event.createdBy);
 
   if (event.capacity <= event.current) {
     throw new AppError(409, "CONFLICT", "募集人数が上限に達しています");

@@ -2,6 +2,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import { db } from "../../config/firebaseAdmin";
 import { AppError } from "../../lib/AppError";
 import { newId } from "../../lib/ids";
+import { assertNotBlocked, excludeBlockedUsers } from "../blocks/blocks.service";
 import { ensureConnection } from "../connections/connections.service";
 import { toUserResponse, type UserResponse } from "../users/users.service";
 import type { MatchRequestDoc, MatchRequestStatus, UserDoc } from "../../types/firestore";
@@ -55,7 +56,7 @@ function calculateRecommendScore(me: UserDoc, other: UserDoc): number {
  * `GET /users/recommend`（技術設計書6-5章、要件定義書3-1章）。
  * 自分以外の全ユーザーにスコアリングを適用し、60点以上のユーザーのみを返す。
  * スコア降順で返す（6章に順序の明記は無いが、推薦の趣旨上スコアの高い順が妥当と判断した。DeveloperAgent判断）。
- * ブロック関係の除外フィルタはPhase3で追加する（技術設計書13-3章の依存関係。今回は未実装）。
+ * ブロック関係（双方向）にあるユーザーを結果から除外する（Phase3で追加。技術設計書5-2章）。
  */
 export async function listRecommendedUsers(me: UserDoc): Promise<UserResponse[]> {
   const snap = await db.collection("users").get();
@@ -66,7 +67,8 @@ export async function listRecommendedUsers(me: UserDoc): Promise<UserResponse[]>
     .filter(({ score }) => score >= RECOMMEND_THRESHOLD)
     .sort((a, b) => b.score - a.score);
 
-  return Promise.all(scored.map(({ user }) => toUserResponse(user, me.userId)));
+  const visible = await excludeBlockedUsers(scored, me.userId, ({ user }) => user.userId);
+  return Promise.all(visible.map(({ user }) => toUserResponse(user, me.userId)));
 }
 
 async function getTargetUserOrThrow(userId: string): Promise<UserDoc> {
@@ -78,12 +80,14 @@ async function getTargetUserOrThrow(userId: string): Promise<UserDoc> {
 /**
  * `POST /users/{id}/match-requests`（技術設計書6-5章）。マッチング申請を作成する（`status=PENDING`）。
  * 自分自身への申請は400、`(from_user_id, to_user_id)`のPENDING重複は409を返す（5-2章制約）。
+ * ブロック関係にある場合はサーバー側で拒否する（Phase3で追加。技術設計書5-2章）。
  */
 export async function createMatchRequest(fromUserId: string, toUserId: string): Promise<MatchRequestResponse> {
   if (fromUserId === toUserId) {
     throw new AppError(400, "VALIDATION_ERROR", "自分自身にマッチング申請はできません");
   }
   await getTargetUserOrThrow(toUserId);
+  await assertNotBlocked(fromUserId, toUserId);
 
   const duplicateSnap = await db
     .collection("matchRequests")
