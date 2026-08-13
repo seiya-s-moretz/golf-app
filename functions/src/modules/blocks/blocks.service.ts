@@ -2,6 +2,7 @@ import type { Transaction } from "firebase-admin/firestore";
 import { Timestamp } from "firebase-admin/firestore";
 import { db } from "../../config/firebaseAdmin";
 import { AppError } from "../../lib/AppError";
+import { assertValidDocumentId } from "../../lib/documentId";
 import { toUserResponse, type UserResponse } from "../users/users.service";
 import type { BlockDoc, UserDoc } from "../../types/firestore";
 
@@ -21,6 +22,7 @@ function blockDocId(blockerUserId: string, blockedUserId: string): string {
 
 /** `POST /users/{id}/block`（技術設計書6-3章）。 */
 export async function blockUser(blockerUserId: string, blockedUserId: string): Promise<void> {
+  assertValidDocumentId(blockedUserId, "ユーザーID");
   if (blockerUserId === blockedUserId) {
     throw new AppError(400, "VALIDATION_ERROR", "自分自身をブロックすることはできません");
   }
@@ -42,6 +44,7 @@ export async function blockUser(blockerUserId: string, blockedUserId: string): P
 
 /** `DELETE /users/{id}/block`（技術設計書6-3章）。存在しない場合も冪等に成功させる。 */
 export async function unblockUser(blockerUserId: string, blockedUserId: string): Promise<void> {
+  assertValidDocumentId(blockedUserId, "ユーザーID");
   await db.collection("blocks").doc(blockDocId(blockerUserId, blockedUserId)).delete();
 }
 

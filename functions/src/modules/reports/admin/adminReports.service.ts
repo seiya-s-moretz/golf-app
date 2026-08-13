@@ -2,6 +2,7 @@ import type { Query } from "firebase-admin/firestore";
 import { Timestamp } from "firebase-admin/firestore";
 import { db } from "../../../config/firebaseAdmin";
 import { AppError } from "../../../lib/AppError";
+import { assertValidDocumentId } from "../../../lib/documentId";
 import { applyBeforeCursor, parseLimit } from "../../../lib/pagination";
 import { toReportResponse } from "../reports.service";
 import type { BoardPostDoc, ReportDoc, ReportStatus, UserDoc } from "../../../types/firestore";
@@ -210,14 +211,19 @@ export async function updateReportStatus(
   adminUserId: string,
   input: UpdateReportStatusInput
 ): Promise<ReportAdminDetailResponse> {
+  assertValidDocumentId(reportId, "通報ID");
   const ref = db.collection("reports").doc(reportId);
   const snap = await ref.get();
   if (!snap.exists) throw new AppError(404, "NOT_FOUND", "通報が見つかりません");
 
+  // 状態遷移順序は強制しない（ADR-0007）ため、誤操作の巻き戻しでPENDINGへ戻すこともできる。
+  // その際に対応者・対応日時が残っていると「未対応なのに対応済み日時がある」矛盾した表示になるため、
+  // PENDINGへ戻すときは対応情報をクリアする
+  const isHandled = input.status !== "PENDING";
   const update: Record<string, unknown> = {
     status: input.status,
-    handledByUserId: adminUserId,
-    handledAt: Timestamp.now(),
+    handledByUserId: isHandled ? adminUserId : null,
+    handledAt: isHandled ? Timestamp.now() : null,
   };
   if (input.handling_memo !== undefined) {
     update.handlingMemo = input.handling_memo;

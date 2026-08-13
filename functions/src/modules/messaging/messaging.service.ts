@@ -1,10 +1,11 @@
 import { Timestamp } from "firebase-admin/firestore";
 import { db } from "../../config/firebaseAdmin";
 import { AppError } from "../../lib/AppError";
+import { assertValidDocumentId } from "../../lib/documentId";
 import { newId } from "../../lib/ids";
 import { applyBeforeCursor, parseLimit } from "../../lib/pagination";
 import { buildPairId, normalizePair } from "../../lib/pairId";
-import { assertNotBlocked } from "../blocks/blocks.service";
+import { assertNotBlocked, excludeBlockedUsers } from "../blocks/blocks.service";
 import { getConnection } from "../connections/connections.service";
 import { toUserResponse, type UserResponse } from "../users/users.service";
 import type { ConnectionDoc, MessageDoc, UserDoc } from "../../types/firestore";
@@ -55,7 +56,12 @@ export async function listConversations(userId: string): Promise<ConversationRes
     db.collection("connections").where("userAId", "==", userId).get(),
     db.collection("connections").where("userBId", "==", userId).get(),
   ]);
-  const connectionDocs = [...asUserA.docs, ...asUserB.docs].map((d) => d.data() as ConnectionDoc);
+  const allConnectionDocs = [...asUserA.docs, ...asUserB.docs].map((d) => d.data() as ConnectionDoc);
+  // ブロック関係にある相手との会話は一覧から除外する（他の一覧系APIと同じ扱い。技術設計書5-2章）。
+  // 除外しないと、送信すると403になる会話がプレビュー付きで残り続け、閉じる手段が無い
+  const connectionDocs = await excludeBlockedUsers(allConnectionDocs, userId, (c) =>
+    c.userAId === userId ? c.userBId : c.userAId
+  );
   if (connectionDocs.length === 0) return [];
 
   const partnerIds = connectionDocs.map((c) => (c.userAId === userId ? c.userBId : c.userAId));
@@ -111,6 +117,7 @@ export async function listMessages(
   before: string | undefined,
   limitRaw: unknown
 ): Promise<MessageResponse[]> {
+  assertValidDocumentId(partnerId, "partnerId");
   const connection = await getConnection(requesterUserId, partnerId);
   if (!connection) {
     throw new AppError(403, "FORBIDDEN", "このユーザーとの会話は存在しません");
@@ -139,6 +146,7 @@ export async function sendMessage(
   partnerId: string,
   content: string
 ): Promise<MessageResponse> {
+  assertValidDocumentId(partnerId, "partnerId");
   if (requesterUserId === partnerId) {
     throw new AppError(400, "VALIDATION_ERROR", "自分自身にはメッセージを送信できません");
   }
@@ -203,6 +211,7 @@ export async function sendMessage(
  * DeveloperAgent判断）。
  */
 export async function markConversationRead(requesterUserId: string, partnerId: string): Promise<void> {
+  assertValidDocumentId(partnerId, "partnerId");
   const pairId = buildPairId(requesterUserId, partnerId);
   const { userAId } = normalizePair(requesterUserId, partnerId);
   const connectionRef = db.collection("connections").doc(pairId);
@@ -210,33 +219,47 @@ export async function markConversationRead(requesterUserId: string, partnerId: s
   if (!connectionSnap.exists) {
     throw new AppError(403, "FORBIDDEN", "このユーザーとの会話は存在しません");
   }
-  const connection = connectionSnap.data() as ConnectionDoc;
   const isRequesterA = requesterUserId === userAId;
 
   // `pairId`単一フィールドの等価条件のみで取得し（自動インデックスのみで足りる）、
   // 相手からの未読メッセージの絞り込みはアプリケーションコード側で行う（MVP規模のメッセージ量を前提とした
   // 実装判断。技術設計書12-2-3章のブロック除外フィルタと同じ考え方で、複合インデックスの追加を避ける）。
   const messagesSnap = await db.collection("messages").where("pairId", "==", pairId).get();
-  const unreadFromPartnerRefs = messagesSnap.docs.filter((d) => {
+  const unreadFromPartner = messagesSnap.docs.filter((d) => {
     const data = d.data() as MessageDoc;
     return data.senderId === partnerId && data.readAt === null;
   });
+  const markedMessageIds = new Set(unreadFromPartner.map((d) => (d.data() as MessageDoc).messageId));
 
   const now = Timestamp.now();
   const BATCH_CHUNK_SIZE = 400; // Firestoreバッチの上限500件に対し余裕を持たせる
-  for (let i = 0; i < unreadFromPartnerRefs.length; i += BATCH_CHUNK_SIZE) {
+  for (let i = 0; i < unreadFromPartner.length; i += BATCH_CHUNK_SIZE) {
     const batch = db.batch();
-    unreadFromPartnerRefs.slice(i, i + BATCH_CHUNK_SIZE).forEach((d) => {
+    unreadFromPartner.slice(i, i + BATCH_CHUNK_SIZE).forEach((d) => {
       batch.update(d.ref, { readAt: now });
     });
     await batch.commit();
   }
 
-  const connectionUpdate: Record<string, unknown> = isRequesterA
-    ? { unreadCountForUserA: 0 }
-    : { unreadCountForUserB: 0 };
-  if (connection.lastMessageSenderId === partnerId) {
-    connectionUpdate.lastMessageReadAt = now;
-  }
-  await connectionRef.update(connectionUpdate);
+  // 未読件数は「0にする」のではなく「既読にした件数だけ減らす」。既読化の最中に相手から新しい
+  // メッセージが届くと、0固定では**その新着が未読として二度と数えられない**（一覧の未読バッジは
+  // `Connection`の非正規化カウンタしか見ておらず、再計算する箇所が無い）。
+  // `lastMessageReadAt`も、実際に既読化したメッセージが最新メッセージだった場合にのみ更新する
+  // （古いスナップショットを信じると、直前に届いた未読メッセージを既読として表示してしまう）。
+  await db.runTransaction(async (tx) => {
+    const latestSnap = await tx.get(connectionRef);
+    if (!latestSnap.exists) return;
+    const latest = latestSnap.data() as ConnectionDoc;
+
+    const currentUnread = (isRequesterA ? latest.unreadCountForUserA : latest.unreadCountForUserB) ?? 0;
+    const nextUnread = Math.max(0, currentUnread - markedMessageIds.size);
+
+    const connectionUpdate: Record<string, unknown> = isRequesterA
+      ? { unreadCountForUserA: nextUnread }
+      : { unreadCountForUserB: nextUnread };
+    if (latest.lastMessageId && markedMessageIds.has(latest.lastMessageId)) {
+      connectionUpdate.lastMessageReadAt = now;
+    }
+    tx.update(connectionRef, connectionUpdate);
+  });
 }

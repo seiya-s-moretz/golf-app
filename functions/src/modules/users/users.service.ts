@@ -1,7 +1,11 @@
+import * as logger from "firebase-functions/logger";
 import { db } from "../../config/firebaseAdmin";
 import { AppError } from "../../lib/AppError";
+import { assertValidDocumentId } from "../../lib/documentId";
 import { getAreaById, toAreaResponse } from "../areas/areas.service";
 import type { Purpose, UserDoc } from "../../types/firestore";
+
+type AreaResponse = ReturnType<typeof toAreaResponse>;
 
 export interface UserResponse {
   user_id: string;
@@ -9,15 +13,17 @@ export interface UserResponse {
   icon_url: string;
   gender: string;
   age: number;
-  area: ReturnType<typeof toAreaResponse>;
+  area: AreaResponse;
   average_score: number;
   purpose: Purpose;
   introduction: string;
+  /** 本人閲覧時のみ含む（PII保護） */
   phone_number?: string;
   phone_verified: boolean;
   phone_verified_at: string | null;
   status: string;
-  is_admin: boolean;
+  /** 本人閲覧時のみ含む（管理者アカウントの列挙を防ぐ） */
+  is_admin?: boolean;
   created_at: string;
 }
 
@@ -32,12 +38,13 @@ export interface UserResponse {
 export async function toUserResponse(userDoc: UserDoc, viewerUserId?: string): Promise<UserResponse> {
   const areaDoc = await getAreaById(userDoc.areaId);
   if (!areaDoc) {
-    // areaは業務上必須参照のため、欠落はサーバー内部の不整合として扱う（レスポンスからのarea欠落は許容しない）
-    throw new AppError(
-      500,
-      "INTERNAL",
-      `ユーザー ${userDoc.userId} が参照するエリア(${userDoc.areaId})が見つかりません`
-    );
+    // エリアマスタの欠落はデータ不整合だが、ここで500を投げると`Promise.all`で束ねている
+    // 一覧系API（会話一覧・ブロック一覧・おすすめ）が**1ユーザーの不整合で全体エラー**になる。
+    // 他の参照欠落（会話相手の欠落・通報対象の欠落）と同様に縮退させ、調査用にログだけ残す
+    logger.error("ユーザーが参照するエリアが見つかりません", {
+      userId: userDoc.userId,
+      areaId: userDoc.areaId,
+    });
   }
   const isSelf = viewerUserId === undefined || viewerUserId === userDoc.userId;
   return {
@@ -46,7 +53,7 @@ export async function toUserResponse(userDoc: UserDoc, viewerUserId?: string): P
     icon_url: userDoc.iconUrl,
     gender: userDoc.gender,
     age: userDoc.age,
-    area: toAreaResponse(areaDoc),
+    area: areaDoc ? toAreaResponse(areaDoc) : unknownAreaResponse(userDoc.areaId),
     average_score: userDoc.averageScore,
     purpose: userDoc.purpose,
     introduction: userDoc.introduction,
@@ -54,13 +61,29 @@ export async function toUserResponse(userDoc: UserDoc, viewerUserId?: string): P
     phone_verified: userDoc.phoneVerified,
     phone_verified_at: userDoc.phoneVerifiedAt ? userDoc.phoneVerifiedAt.toDate().toISOString() : null,
     status: userDoc.status,
-    is_admin: userDoc.isAdmin,
+    // `is_admin`（運営メンバーかどうか）は本人以外には返さない。他人にも返すと、任意の認証済みユーザーが
+    // 「どのアカウントが管理者か」を列挙でき、攻撃対象を特定されてしまう。
+    // クライアント側は他人のプロフィールで`is_admin`を参照しない（マイページの自分自身のみ）ため影響は無い
+    ...(isSelf ? { is_admin: userDoc.isAdmin } : {}),
     created_at: userDoc.createdAt.toDate().toISOString(),
+  };
+}
+
+/** エリアマスタが欠落している場合の縮退表示用。クライアントは`area`を必須として扱うためnullにはしない。 */
+function unknownAreaResponse(areaId: string): AreaResponse {
+  return {
+    area_id: areaId,
+    prefecture: "",
+    area_name: "(不明なエリア)",
+    display_order: Number.MAX_SAFE_INTEGER,
+    is_active: false,
+    created_at: new Date(0).toISOString(),
   };
 }
 
 /** `GET /users/{id}`（技術設計書6-3章）。 */
 export async function getUserById(userId: string): Promise<UserDoc> {
+  assertValidDocumentId(userId, "ユーザーID");
   const snap = await db.collection("users").doc(userId).get();
   if (!snap.exists) throw new AppError(404, "NOT_FOUND", "ユーザーが見つかりません");
   return snap.data() as UserDoc;
