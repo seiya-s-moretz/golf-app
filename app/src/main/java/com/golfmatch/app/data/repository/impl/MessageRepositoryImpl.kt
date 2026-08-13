@@ -15,8 +15,12 @@ class MessageRepositoryImpl @Inject constructor(
     override suspend fun getConversations(): List<Conversation> =
         api.getConversations().map { it.toDomain() }
 
-    override suspend fun getMessages(partnerId: String, before: String?, limit: Int): List<Message> =
-        api.getMessages(partnerId, before, limit).map { it.toDomain() }
+    override suspend fun getMessages(
+        partnerId: String,
+        before: String?,
+        beforeId: String?,
+        limit: Int
+    ): List<Message> = api.getMessages(partnerId, before, beforeId, limit).map { it.toDomain() }
 
     override suspend fun sendMessage(partnerId: String, content: String): Message =
         api.sendMessage(partnerId, SendMessageRequestDto(content)).toDomain()

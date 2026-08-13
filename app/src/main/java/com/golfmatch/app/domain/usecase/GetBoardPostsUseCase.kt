@@ -13,6 +13,6 @@ import javax.inject.Inject
 class GetBoardPostsUseCase @Inject constructor(
     private val boardRepository: BoardRepository
 ) {
-    suspend operator fun invoke(before: String? = null, limit: Int = 20): List<BoardPost> =
-        boardRepository.getBoardPosts(before, limit)
+    suspend operator fun invoke(before: String? = null, beforeId: String? = null, limit: Int = 20): List<BoardPost> =
+        boardRepository.getBoardPosts(before, beforeId, limit)
 }

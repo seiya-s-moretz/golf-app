@@ -3,7 +3,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import { db } from "../../../config/firebaseAdmin";
 import { AppError } from "../../../lib/AppError";
 import { assertValidDocumentId } from "../../../lib/documentId";
-import { applyBeforeCursor, parseLimit } from "../../../lib/pagination";
+import { applyBeforeCursor, parseLimit, type BeforeCursor } from "../../../lib/pagination";
 import { toReportResponse } from "../reports.service";
 import type { BoardPostDoc, ReportDoc, ReportStatus, UserDoc } from "../../../types/firestore";
 
@@ -107,9 +107,8 @@ function buildTargetSummary(
   return `${authorName}: ${excerpt}`;
 }
 
-export interface ListAdminReportsParams {
+export interface ListAdminReportsParams extends BeforeCursor {
   status?: ReportStatus;
-  before?: string;
   limit?: unknown;
 }
 
@@ -123,7 +122,7 @@ export async function listAdminReports(params: ListAdminReportsParams): Promise<
     query = query.where("status", "==", params.status);
   }
   query = query.orderBy("createdAt", "desc");
-  query = applyBeforeCursor(query, params.before);
+  query = applyBeforeCursor(query, params);
   query = query.limit(parseLimit(params.limit));
 
   const snap = await query.get();

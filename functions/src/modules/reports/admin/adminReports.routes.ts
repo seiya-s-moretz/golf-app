@@ -17,8 +17,8 @@ adminReportsRoutes.use(authenticate, requireAdmin);
 adminReportsRoutes.get(
   "/",
   asyncHandler(async (req, res) => {
-    const { status, before, limit } = listAdminReportsQuerySchema.parse(req.query);
-    res.json(await listAdminReports({ status, before, limit }));
+    const { status, before, before_id: beforeId, limit } = listAdminReportsQuerySchema.parse(req.query);
+    res.json(await listAdminReports({ status, before, beforeId, limit }));
   })
 );
 

@@ -8,6 +8,10 @@ import javax.inject.Inject
 class GetMessagesUseCase @Inject constructor(
     private val messageRepository: MessageRepository
 ) {
-    suspend operator fun invoke(partnerId: String, before: String? = null, limit: Int = 50): List<Message> =
-        messageRepository.getMessages(partnerId, before, limit)
+    suspend operator fun invoke(
+        partnerId: String,
+        before: String? = null,
+        beforeId: String? = null,
+        limit: Int = 50
+    ): List<Message> = messageRepository.getMessages(partnerId, before, beforeId, limit)
 }

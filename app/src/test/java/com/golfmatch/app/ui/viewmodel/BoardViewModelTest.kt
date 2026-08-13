@@ -45,21 +45,26 @@ class BoardViewModelTest {
 
         val state = viewModel(repo).uiState.value
 
-        assertEquals(Triple(null, pageSize, 1), repo.calls[0].let { Triple(it.first, it.second, repo.calls.size) })
+        assertEquals(1, repo.calls.size)
+        assertEquals(Triple(null, null, pageSize), repo.calls[0])
         assertEquals(pageSize, state.posts.size)
         assertTrue(state.hasMore)
         assertFalse(state.isLoading)
     }
 
     @Test
-    fun `loadMoreは末尾のcreated_atをカーソルに次ページを末尾へ追加する`() = runTest {
+    fun `loadMoreは末尾のcreated_atとIDをカーソルに次ページを末尾へ追加する`() = runTest {
         val firstPage = posts(0, pageSize)
         val repo = PagingBoardRepository(pages = listOf(firstPage, posts(pageSize, 5)))
         val viewModel = viewModel(repo)
 
         viewModel.loadMore()
 
-        assertEquals(firstPage.last().createdAt.toString() to pageSize, repo.calls[1])
+        // 時刻だけだと同時刻の投稿がページ境界で取りこぼされるため、IDも一緒に渡す
+        assertEquals(
+            Triple(firstPage.last().createdAt.toString(), firstPage.last().postId, pageSize),
+            repo.calls[1]
+        )
         val state = viewModel.uiState.value
         assertEquals(pageSize + 5, state.posts.size)
         assertEquals("post-${pageSize + 4}", state.posts.last().postId)
@@ -142,10 +147,11 @@ class BoardViewModelTest {
         private val failOnCall: Int? = null
     ) : BoardRepository by FakeBoardRepository() {
 
-        val calls = mutableListOf<Pair<String?, Int>>()
+        /** (before, before_id, limit) の呼び出し履歴 */
+        val calls = mutableListOf<Triple<String?, String?, Int>>()
 
-        override suspend fun getBoardPosts(before: String?, limit: Int): List<BoardPost> {
-            calls += before to limit
+        override suspend fun getBoardPosts(before: String?, beforeId: String?, limit: Int): List<BoardPost> {
+            calls += Triple(before, beforeId, limit)
             if (failOnCall == calls.size) throw RuntimeException("取得失敗")
             return pages.getOrElse(calls.size - 1) { emptyList() }
         }

@@ -13,8 +13,8 @@ boardRoutes.use(authenticate);
 boardRoutes.get(
   "/",
   asyncHandler(async (req, res) => {
-    const { before, limit } = listBoardPostsQuerySchema.parse(req.query);
-    res.json(await listBoardPosts(req.currentUser!.userId, { before, limit }));
+    const { before, before_id: beforeId, limit } = listBoardPostsQuerySchema.parse(req.query);
+    res.json(await listBoardPosts(req.currentUser!.userId, { before, beforeId, limit }));
   })
 );
 

@@ -69,7 +69,7 @@ class ReportAdminListViewModel @Inject constructor(
         val generation = ++loadGeneration
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, isLoadingMore = false, errorMessage = null)
-            runCatching { getAdminReportsUseCase(statusFilter, before = null, limit = PAGE_SIZE) }
+            runCatching { getAdminReportsUseCase(statusFilter, before = null, beforeId = null, limit = PAGE_SIZE) }
                 .onSuccess { reports ->
                     if (generation != loadGeneration) return@onSuccess
                     _uiState.value = _uiState.value.copy(
@@ -96,12 +96,20 @@ class ReportAdminListViewModel @Inject constructor(
     fun loadMore() {
         val state = _uiState.value
         if (state.isLoading || state.isLoadingMore || !state.hasMore) return
-        val cursor = state.reports.lastOrNull()?.report?.createdAt?.toString() ?: return
+        // カーソルは(created_at, ID)の組。時刻だけだと同時刻の通報がページ境界で取りこぼされる
+        val last = state.reports.lastOrNull()?.report ?: return
         val statusFilter = state.statusFilter
         val generation = loadGeneration
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoadingMore = true, errorMessage = null)
-            runCatching { getAdminReportsUseCase(statusFilter, before = cursor, limit = PAGE_SIZE) }
+            runCatching {
+                getAdminReportsUseCase(
+                    statusFilter,
+                    before = last.createdAt.toString(),
+                    beforeId = last.reportId,
+                    limit = PAGE_SIZE
+                )
+            }
                 .onSuccess { page ->
                     if (generation != loadGeneration) return@onSuccess
                     _uiState.value = _uiState.value.copy(

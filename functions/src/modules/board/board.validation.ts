@@ -12,6 +12,7 @@ const MAX_CONTENT_LENGTH = 1000;
 /** `GET /board`クエリパラメータ（技術設計書6-6章、カーソル型ページネーション）。 */
 export const listBoardPostsQuerySchema = z.object({
   before: z.string().optional(),
+  before_id: z.string().optional(),
   limit: z.string().optional(),
 });
 

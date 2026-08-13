@@ -40,7 +40,7 @@ class ReportAdminListViewModelTest {
         val viewModel = ReportAdminListViewModel(GetAdminReportsUseCase(repo))
 
         assertEquals(1, repo.calls.size)
-        assertEquals(Triple(null, null, pageSize), repo.calls[0])
+        assertEquals(listOf<Any?>(null, null, null, pageSize), repo.calls[0])
         assertEquals(pageSize, viewModel.uiState.value.reports.size)
         assertTrue(viewModel.uiState.value.hasMore)
         assertFalse(viewModel.uiState.value.isLoading)
@@ -55,8 +55,9 @@ class ReportAdminListViewModelTest {
         viewModel.loadMore()
 
         assertEquals(2, repo.calls.size)
+        // 時刻だけだと同時刻の通報がページ境界で取りこぼされるためIDも渡す
         assertEquals(
-            Triple(null, firstPage.last().report.createdAt.toString(), pageSize),
+            listOf(null, firstPage.last().report.createdAt.toString(), firstPage.last().report.reportId, pageSize),
             repo.calls[1]
         )
         val state = viewModel.uiState.value
@@ -126,7 +127,7 @@ class ReportAdminListViewModelTest {
         viewModel.loadMore()
         viewModel.onStatusFilterSelected(ReportStatus.PENDING)
 
-        assertEquals(Triple(ReportStatus.PENDING, null, pageSize), repo.calls[2])
+        assertEquals(listOf<Any?>(ReportStatus.PENDING, null, null, pageSize), repo.calls[2])
         assertEquals(3, viewModel.uiState.value.reports.size)
 
         gate.complete(Unit)
@@ -162,14 +163,16 @@ class ReportAdminListViewModelTest {
         private val gateOnCursor: CompletableDeferred<Unit>? = null
     ) : ReportRepository by FakeReportRepository() {
 
-        val calls = mutableListOf<Triple<ReportStatus?, String?, Int>>()
+        /** (statusFilter, before, before_id, limit) の呼び出し履歴 */
+        val calls = mutableListOf<List<Any?>>()
 
         override suspend fun getAdminReports(
             statusFilter: ReportStatus?,
             before: String?,
+            beforeId: String?,
             limit: Int
         ): List<ReportSummary> {
-            calls += Triple(statusFilter, before, limit)
+            calls += listOf(statusFilter, before, beforeId, limit)
             val callIndex = calls.size - 1
             if (before != null) gateOnCursor?.await()
             if (failOnCall == calls.size) throw RuntimeException("取得失敗")

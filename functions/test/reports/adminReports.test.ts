@@ -137,9 +137,11 @@ describe("通報管理(admin)API", () => {
         .expect(200);
       expect(firstPage.body).toHaveLength(2);
 
+      // カーソルは(created_at, ID)の組で渡す。時刻だけだと同時刻の通報が飛ばされる
       const cursor = firstPage.body[1].created_at as string;
+      const cursorId = firstPage.body[1].report_id as string;
       const secondPage = await request(app)
-        .get(`/admin/reports?limit=2&before=${encodeURIComponent(cursor)}`)
+        .get(`/admin/reports?limit=2&before=${encodeURIComponent(cursor)}&before_id=${cursorId}`)
         .set(...authHeader(admin.accessToken))
         .expect(200);
       expect(secondPage.body).toHaveLength(1);

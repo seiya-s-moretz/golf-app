@@ -15,6 +15,7 @@ class GetAdminReportsUseCase @Inject constructor(
     suspend operator fun invoke(
         statusFilter: ReportStatus? = null,
         before: String? = null,
+        beforeId: String? = null,
         limit: Int = 50
-    ): List<ReportSummary> = reportRepository.getAdminReports(statusFilter, before, limit)
+    ): List<ReportSummary> = reportRepository.getAdminReports(statusFilter, before, beforeId, limit)
 }

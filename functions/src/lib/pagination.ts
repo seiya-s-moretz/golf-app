@@ -1,8 +1,9 @@
 import type { Query } from "firebase-admin/firestore";
+import { FieldPath, Timestamp } from "firebase-admin/firestore";
 import { AppError } from "./AppError";
 
 /**
- * カーソル型ページネーション（`before`/`limit`）の共通ヘルパー（技術設計書12-1章）。
+ * カーソル型ページネーション（`before`/`before_id`/`limit`）の共通ヘルパー（技術設計書12-1章）。
  * `GET /admin/reports`・`GET /conversations/{partnerId}/messages`・`GET /board`で使用する。
  */
 export const DEFAULT_PAGE_LIMIT = 20;
@@ -23,17 +24,39 @@ export function parseLimit(raw: unknown, fallback: number = DEFAULT_PAGE_LIMIT):
   return Math.min(Math.trunc(n), MAX_PAGE_LIMIT);
 }
 
+export interface BeforeCursor {
+  /** 前ページ最後の要素の`created_at`（ISO-8601） */
+  before?: string;
+  /** 前ページ最後の要素のドキュメントID */
+  beforeId?: string;
+}
+
 /**
- * `before`カーソル（ISO-8601文字列）より前のドキュメントに絞り込む。
+ * 前ページの最後の要素の**次**から取得する（`created_at`降順）。
  *
- * 日時として解釈できない値は**黙って無視せず400で弾く**。無視するとカーソル指定が効かないまま
- * 1ページ目が返るため、ページングし続けるクライアントが同じページを取り続ける（無限ループ）。
+ * カーソルは`(created_at, ドキュメントID)`の組で受け取る。`created_at`だけで
+ * `where("createdAt", "<", cursor)`とすると、**同じ時刻のドキュメントが丸ごと飛ばされる**
+ * （ミリ秒精度のため、同時投稿・一括投入では実際に発生する）。ページ境界に同時刻の要素が
+ * 並ぶと、後続ページのどれにも現れず永久に読めなくなるため、IDを第2ソートキーにして
+ * `startAfter`で「その要素の次」を厳密に指す。
+ *
+ * `before`と`before_id`は必ず両方指定する（片方のみは400）。どちらも未指定なら先頭ページ。
  */
-export function applyBeforeCursor<T extends Query>(query: T, before: string | undefined, field = "createdAt"): T {
-  if (before === undefined || before === "") return query;
-  const date = new Date(before);
+export function applyBeforeCursor<T extends Query>(query: T, cursor: BeforeCursor): T {
+  const hasBefore = cursor.before !== undefined && cursor.before !== "";
+  const hasBeforeId = cursor.beforeId !== undefined && cursor.beforeId !== "";
+
+  // 第2ソートキーは常に付ける（先頭ページと後続ページで並び順が変わらないようにするため）
+  const ordered = query.orderBy(FieldPath.documentId(), "desc") as T;
+  if (!hasBefore && !hasBeforeId) return ordered;
+
+  if (!hasBefore || !hasBeforeId) {
+    throw new AppError(400, "VALIDATION_ERROR", "beforeとbefore_idは両方指定してください");
+  }
+
+  const date = new Date(cursor.before as string);
   if (Number.isNaN(date.getTime())) {
     throw new AppError(400, "VALIDATION_ERROR", "beforeはISO-8601形式の日時で指定してください");
   }
-  return query.where(field, "<", date) as T;
+  return ordered.startAfter(Timestamp.fromDate(date), cursor.beforeId) as T;
 }

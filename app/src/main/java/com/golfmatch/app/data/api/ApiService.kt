@@ -120,9 +120,14 @@ interface ApiService {
     suspend fun rejectMatchRequest(@Path("id") matchRequestId: String): MatchRequestDto
 
     // 6-6. 掲示板
+    /**
+     * ページネーションのカーソルは`before`（前ページ末尾の`created_at`）と`before_id`（同ID）の**組**で渡す。
+     * 時刻だけでは同一時刻のレコードがページ境界で取りこぼされるため、両方必須（片方のみは400）。
+     */
     @GET("board")
     suspend fun getBoardPosts(
         @Query("before") before: String?,
+        @Query("before_id") beforeId: String?,
         @Query("limit") limit: Int
     ): List<BoardPostDto>
 
@@ -137,6 +142,7 @@ interface ApiService {
     suspend fun getMessages(
         @Path("partnerId") partnerId: String,
         @Query("before") before: String?,
+        @Query("before_id") beforeId: String?,
         @Query("limit") limit: Int
     ): List<MessageDto>
 
@@ -158,6 +164,7 @@ interface ApiService {
     suspend fun getAdminReports(
         @Query("status") status: String?,
         @Query("before") before: String?,
+        @Query("before_id") beforeId: String?,
         @Query("limit") limit: Int
     ): List<ReportAdminSummaryDto>
 

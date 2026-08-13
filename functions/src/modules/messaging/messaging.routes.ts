@@ -21,8 +21,8 @@ conversationsRoutes.get(
 conversationsRoutes.get(
   "/:partnerId/messages",
   asyncHandler(async (req, res) => {
-    const { before, limit } = listMessagesQuerySchema.parse(req.query);
-    res.json(await listMessages(req.currentUser!.userId, req.params.partnerId, before, limit));
+    const { before, before_id: beforeId, limit } = listMessagesQuerySchema.parse(req.query);
+    res.json(await listMessages(req.currentUser!.userId, req.params.partnerId, { before, beforeId }, limit));
   })
 );
 

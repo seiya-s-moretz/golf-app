@@ -13,7 +13,7 @@ interface MessageRepository {
      * [partnerId] とのメッセージ履歴取得。Connectionが存在しない場合はサーバー側で403となる。
      * [before] はページネーションカーソル（nullの場合は最新から取得）。
      */
-    suspend fun getMessages(partnerId: String, before: String?, limit: Int): List<Message>
+    suspend fun getMessages(partnerId: String, before: String?, beforeId: String?, limit: Int): List<Message>
 
     /** Connectionが存在しない、またはブロック関係にある場合はサーバー側で拒否される */
     suspend fun sendMessage(partnerId: String, content: String): Message

@@ -82,7 +82,7 @@ class MessageThreadViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(isLoading = true, isLoadingOlder = false, errorMessage = null)
             runCatching {
                 val partner = getUserUseCase(partnerId)
-                val messages = getMessagesUseCase(partnerId, before = null, limit = PAGE_SIZE)
+                val messages = getMessagesUseCase(partnerId, before = null, beforeId = null, limit = PAGE_SIZE)
                 partner to messages
             }.onSuccess { (partner, messages) ->
                 _uiState.value = _uiState.value.copy(
@@ -110,10 +110,18 @@ class MessageThreadViewModel @Inject constructor(
     fun loadOlder() {
         val state = _uiState.value
         if (state.isLoading || state.isLoadingOlder || !state.hasOlder) return
-        val cursor = state.messages.firstOrNull()?.createdAt?.toString() ?: return
+        // カーソルは(created_at, ID)の組。時刻だけだと同時刻のメッセージがページ境界で取りこぼされる
+        val oldest = state.messages.firstOrNull() ?: return
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoadingOlder = true, errorMessage = null)
-            runCatching { getMessagesUseCase(partnerId, before = cursor, limit = PAGE_SIZE) }
+            runCatching {
+                getMessagesUseCase(
+                    partnerId,
+                    before = oldest.createdAt.toString(),
+                    beforeId = oldest.messageId,
+                    limit = PAGE_SIZE
+                )
+            }
                 .onSuccess { older ->
                     _uiState.value = _uiState.value.copy(
                         isLoadingOlder = false,

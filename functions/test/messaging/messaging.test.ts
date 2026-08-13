@@ -234,9 +234,13 @@ describe("メッセージ機能", () => {
       expect(firstPage.body[0].content).toBe("メッセージ4");
       expect(firstPage.body[1].content).toBe("メッセージ3");
 
+      // カーソルは(created_at, ID)の組で渡す。時刻だけだと同時刻のメッセージが飛ばされる
       const cursor = firstPage.body[1].created_at as string;
+      const cursorId = firstPage.body[1].message_id as string;
       const secondPage = await request(app)
-        .get(`/conversations/${userB.userId}/messages?limit=2&before=${encodeURIComponent(cursor)}`)
+        .get(
+          `/conversations/${userB.userId}/messages?limit=2&before=${encodeURIComponent(cursor)}&before_id=${cursorId}`
+        )
         .set(...authHeader(userA.accessToken))
         .expect(200);
       expect(secondPage.body).toHaveLength(2);

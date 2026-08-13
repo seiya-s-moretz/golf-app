@@ -89,7 +89,7 @@ open class FakeApiService : ApiService {
 
     override suspend fun rejectMatchRequest(matchRequestId: String): MatchRequestDto = notStubbed("rejectMatchRequest")
 
-    override suspend fun getBoardPosts(before: String?, limit: Int): List<BoardPostDto> =
+    override suspend fun getBoardPosts(before: String?, beforeId: String?, limit: Int): List<BoardPostDto> =
         notStubbed("getBoardPosts")
 
     override suspend fun createBoardPost(body: CreateBoardPostRequestDto): BoardPostDto =
@@ -97,8 +97,12 @@ open class FakeApiService : ApiService {
 
     override suspend fun getConversations(): List<ConversationDto> = notStubbed("getConversations")
 
-    override suspend fun getMessages(partnerId: String, before: String?, limit: Int): List<MessageDto> =
-        notStubbed("getMessages")
+    override suspend fun getMessages(
+        partnerId: String,
+        before: String?,
+        beforeId: String?,
+        limit: Int
+    ): List<MessageDto> = notStubbed("getMessages")
 
     override suspend fun sendMessage(partnerId: String, body: SendMessageRequestDto): MessageDto =
         notStubbed("sendMessage")
@@ -110,6 +114,7 @@ open class FakeApiService : ApiService {
     override suspend fun getAdminReports(
         status: String?,
         before: String?,
+        beforeId: String?,
         limit: Int
     ): List<ReportAdminSummaryDto> = notStubbed("getAdminReports")
 

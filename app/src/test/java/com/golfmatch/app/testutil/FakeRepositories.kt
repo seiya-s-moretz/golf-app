@@ -140,7 +140,7 @@ class FakeBoardRepository(
     var lastGetBoardPostsArgs: Pair<String?, Int>? = null
         private set
 
-    override suspend fun getBoardPosts(before: String?, limit: Int): List<BoardPost> {
+    override suspend fun getBoardPosts(before: String?, beforeId: String?, limit: Int): List<BoardPost> {
         lastGetBoardPostsArgs = before to limit
         return boardPosts
     }
@@ -198,7 +198,12 @@ class FakeMessageRepository(
 
     override suspend fun getConversations(): List<Conversation> = conversations
 
-    override suspend fun getMessages(partnerId: String, before: String?, limit: Int): List<Message> {
+    override suspend fun getMessages(
+        partnerId: String,
+        before: String?,
+        beforeId: String?,
+        limit: Int
+    ): List<Message> {
         lastGetMessagesArgs = Triple(partnerId, before, limit)
         return messages
     }
@@ -236,7 +241,12 @@ class FakeReportRepository(
         return TestFixtures.report(targetType = targetType, reasonCategory = reasonCategory, reasonText = reasonText)
     }
 
-    override suspend fun getAdminReports(statusFilter: ReportStatus?, before: String?, limit: Int): List<ReportSummary> {
+    override suspend fun getAdminReports(
+        statusFilter: ReportStatus?,
+        before: String?,
+        beforeId: String?,
+        limit: Int
+    ): List<ReportSummary> {
         lastAdminReportsStatusFilter = statusFilter
         return adminReports
     }

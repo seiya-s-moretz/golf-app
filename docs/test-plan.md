@@ -509,15 +509,19 @@ DeveloperAgentは`ReportStatus`リネームに伴い`ReportMapperTest.kt`・`Ent
    - 重複チェックと作成を`runTransaction`にまとめた。分けていると同一ユーザーの同時POSTが双方とも通過し、PENDING申請が2件でき、両方承認されて定員が二重に減る
 5. **`GET /round-events/{id}`のブロック除外**（4-10章）
    - 一覧から除外している募集を、IDを知っていれば単体取得できていた。一覧と挙動を揃えて404を返す
+6. **`before`カーソルの同時刻取りこぼし**（4-12章、2026-08-13追加対応）
+   - `where("createdAt", "<", cursor)`は**同じ時刻のドキュメントを丸ごと除外する**ため、ページ境界に同時刻の要素が並ぶと後続のどのページにも現れず永久に読めなくなる。`Timestamp.now()`はミリ秒精度であり、同時投稿・一括投入・データ移行では現実に発生する
+   - 修正: カーソルを`(created_at, ドキュメントID)`の組に変更し、`orderBy(documentId, desc)`を第2ソートキーとして`startAfter`で「その要素の次」を厳密に指すようにした。APIに`before_id`を追加し、`before`と両方指定（片方のみは400）。Android側も末尾要素のIDを渡すよう3画面（通報管理一覧・メッセージ・掲示板）を更新
+   - `firestore.indexes.json`の複合インデックスにも`__name__ DESC`を明記した（Emulatorはインデックス不足を検知しないため、本番でのみ失敗する事故を避ける）
+   - 検証: 同一`created_at`の投稿3件を直接Firestoreへ投入し、`limit=2`で最後までページングして**3件すべて取得できる**ことを確認（旧実装では取りこぼす）
 
 #### 引き続き未対応
 
 - ~~**マッチング申請の逆方向重複**（4-10章）~~: **2026-08-13、プロダクトオーナーの決定により「重複できてよい」と確定**（現状の実装のままでよい）。A→BとB→AのPENDINGが併存しても、承認時の`ensureConnection`は冪等であり実害が無いことを確認済み
 - **`listRecommendedUsers`の全件走査＋N+1**（4-10章）: `users`全件取得に加え、結果ごとに`areaMasters`を個別取得している。エリアの一括取得でN+1は解消できるが、走査自体は絞り込み条件の設計が必要
-- **`GET /users/recommend`・`GET /conversations`のページネーション**（4-10章）: 技術設計書10章の非機能要件は対応を前提としている。件数が青天井に増えるのは`/board`（対応済み）とこの2つ
-- **`before`カーソルが同時刻のドキュメントを取りこぼす**（4-12章）: `createdAt`がミリ秒まで一致するドキュメントがページ境界にあると次ページ以降で読めない。`(createdAt, documentId)`の複合カーソルが必要で、`before_id`のようなAPI追加とクライアント対応を伴う
+- **`GET /users/recommend`・`GET /conversations`のページネーション**（4-10章）: 技術設計書10章の非機能要件は対応を前提としている。件数が青天井に増えるのは`/board`（対応済み）とこの2つ。ただし会話一覧はConnection数、おすすめはスコア60点以上のユーザー数が上限であり、掲示板ほど無制限には増えない
 
-検証: `npm test`は**230件成功、0失敗**。`./gradlew :app:testDebugUnitTest`は**168件成功、0失敗**、`:app:assembleDebug`も成功。
+検証: `npm test`は**232件成功、0失敗**。`./gradlew :app:testDebugUnitTest`は**170件成功、0失敗**、`:app:assembleDebug`も成功。
 
 ---
 

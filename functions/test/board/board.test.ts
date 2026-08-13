@@ -1,12 +1,12 @@
+import { Timestamp } from "firebase-admin/firestore";
 import request from "supertest";
 import { createApp } from "../../src/app";
+import { db } from "../../src/config/firebaseAdmin";
 import { authHeader, registerNewUser } from "../helpers/fixtures";
 
 /**
  * `GET /board`・`POST /board`（技術設計書6-6章）。
- * `GET /board`はページネーション無しで全件取得する実装判断（DeveloperAgent、board.service.tsコメント参照）。
- * 技術設計書6-6章にはページネーションの明記が無く、Androidクライアント`ApiService.getBoardPosts()`も
- * クエリパラメータを取らないため、実装判断として妥当と判断する（TesterAgent確認）。
+ * `GET /board`は`before`/`before_id`/`limit`によるカーソル型ページネーションに対応する（2026-08-13追加）。
  */
 describe("GET/POST /board", () => {
   const app = createApp();
@@ -99,8 +99,9 @@ describe("GET/POST /board", () => {
     expect(firstPage.body[1].content).toBe("3件目");
 
     const cursor = firstPage.body[1].created_at as string;
+    const cursorId = firstPage.body[1].post_id as string;
     const secondPage = await request(app)
-      .get(`/board?limit=2&before=${encodeURIComponent(cursor)}`)
+      .get(`/board?limit=2&before=${encodeURIComponent(cursor)}&before_id=${cursorId}`)
       .set(...authHeader(user.accessToken))
       .expect(200);
     expect(secondPage.body).toHaveLength(2);
@@ -108,18 +109,62 @@ describe("GET/POST /board", () => {
     expect(secondPage.body[1].content).toBe("1件目");
   });
 
+  test("created_atが完全に同一の投稿でもページ境界で取りこぼさない", async () => {
+    const user = await registerNewUser(app);
+    // 同一ミリ秒に複数件作成される状況（同時投稿・一括投入・データ移行など）を再現する。
+    // 時刻だけのカーソル（created_at < cursor）だと、境界にある同時刻の投稿が
+    // どのページにも現れず永久に読めなくなる
+    const sameTime = Timestamp.fromMillis(1_800_000_000_000);
+    const postIds = ["post-tie-1", "post-tie-2", "post-tie-3"];
+    for (const postId of postIds) {
+      // eslint-disable-next-line no-await-in-loop
+      await db.collection("boardPosts").doc(postId).set({
+        postId,
+        userId: user.userId,
+        content: `同時刻投稿 ${postId}`,
+        createdAt: sameTime,
+      });
+    }
+
+    const collected: string[] = [];
+    let before: string | undefined;
+    let beforeId: string | undefined;
+    for (let page = 0; page < 5; page++) {
+      const query = before
+        ? `/board?limit=2&before=${encodeURIComponent(before)}&before_id=${beforeId}`
+        : "/board?limit=2";
+      // eslint-disable-next-line no-await-in-loop
+      const res = await request(app)
+        .get(query)
+        .set(...authHeader(user.accessToken))
+        .expect(200);
+      if (res.body.length === 0) break;
+      collected.push(...res.body.map((p: { post_id: string }) => p.post_id));
+      before = res.body[res.body.length - 1].created_at as string;
+      beforeId = res.body[res.body.length - 1].post_id as string;
+    }
+
+    expect(collected.sort()).toEqual([...postIds].sort());
+  });
+
   test("不正なbefore・limitは黙って無視せず400を返す", async () => {
     const user = await registerNewUser(app);
 
     // 無視すると1ページ目が返り続け、ページングするクライアントが無限ループする
     const badBefore = await request(app)
-      .get("/board?before=garbage")
+      .get("/board?before=garbage&before_id=dummy")
       .set(...authHeader(user.accessToken))
       .expect(400);
     expect(badBefore.body.error.code).toBe("VALIDATION_ERROR");
 
     await request(app)
       .get("/board?limit=abc")
+      .set(...authHeader(user.accessToken))
+      .expect(400);
+
+    // 片方だけの指定も曖昧なため400（beforeだけだと同時刻の取りこぼしが起きる）
+    await request(app)
+      .get("/board?before=2026-08-13T00:00:00.000Z")
       .set(...authHeader(user.accessToken))
       .expect(400);
   });

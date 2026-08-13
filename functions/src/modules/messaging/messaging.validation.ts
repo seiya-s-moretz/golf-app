@@ -15,5 +15,6 @@ export const sendMessageSchema = z.object({
 /** `GET /conversations/{partnerId}/messages`クエリパラメータ（技術設計書6-7章）。 */
 export const listMessagesQuerySchema = z.object({
   before: z.string().optional(),
+  before_id: z.string().optional(),
   limit: z.string().optional(),
 });

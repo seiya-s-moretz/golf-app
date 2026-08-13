@@ -57,7 +57,7 @@ class MessageThreadViewModelTest {
         val state = viewModel(repo).uiState.value
 
         assertEquals(listOf("message-2", "message-1", "message-0"), state.messages.map { it.messageId })
-        assertEquals(Triple(partnerId, null, pageSize), repo.calls[0])
+        assertEquals(listOf(partnerId, null, null, pageSize), repo.calls[0])
         assertFalse(state.isLoading)
     }
 
@@ -69,16 +69,17 @@ class MessageThreadViewModelTest {
     }
 
     @Test
-    fun `loadOlderは先頭(最古)のcreated_atをカーソルに過去を先頭へ追加する`() = runTest {
+    fun `loadOlderは先頭(最古)のcreated_atとIDをカーソルに過去を先頭へ追加する`() = runTest {
         val firstPage = newestFirst(0, pageSize)
         val repo = PagingMessageRepository(pages = listOf(firstPage, newestFirst(pageSize, 5)))
         val viewModel = viewModel(repo)
 
         viewModel.loadOlder()
 
-        // カーソルは画面上の先頭＝APIレスポンス末尾（最も古い）メッセージの時刻
+        // カーソルは画面上の先頭＝APIレスポンス末尾（最も古い）メッセージ。
+        // 時刻だけだと同時刻のメッセージがページ境界で取りこぼされるためIDも渡す
         assertEquals(
-            Triple(partnerId, firstPage.last().createdAt.toString(), pageSize),
+            listOf(partnerId, firstPage.last().createdAt.toString(), firstPage.last().messageId, pageSize),
             repo.calls[1]
         )
         val state = viewModel.uiState.value
@@ -188,10 +189,16 @@ class MessageThreadViewModelTest {
         private val gateOnCursor: CompletableDeferred<Unit>? = null
     ) : MessageRepository by FakeMessageRepository() {
 
-        val calls = mutableListOf<Triple<String, String?, Int>>()
+        /** (partnerId, before, before_id, limit) の呼び出し履歴 */
+        val calls = mutableListOf<List<Any?>>()
 
-        override suspend fun getMessages(partnerId: String, before: String?, limit: Int): List<Message> {
-            calls += Triple(partnerId, before, limit)
+        override suspend fun getMessages(
+            partnerId: String,
+            before: String?,
+            beforeId: String?,
+            limit: Int
+        ): List<Message> {
+            calls += listOf(partnerId, before, beforeId, limit)
             val callIndex = calls.size - 1
             if (before != null) gateOnCursor?.await()
             if (failOnCall == calls.size) throw RuntimeException("取得失敗")

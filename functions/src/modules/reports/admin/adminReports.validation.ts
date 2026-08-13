@@ -6,6 +6,7 @@ export const reportStatusSchema = z.enum(["PENDING", "REVIEWING", "RESOLVED", "D
 export const listAdminReportsQuerySchema = z.object({
   status: reportStatusSchema.optional(),
   before: z.string().optional(),
+  before_id: z.string().optional(),
   limit: z.string().optional(),
 });
 

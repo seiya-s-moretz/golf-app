@@ -2,7 +2,7 @@ import type { Query } from "firebase-admin/firestore";
 import { Timestamp } from "firebase-admin/firestore";
 import { db } from "../../config/firebaseAdmin";
 import { newId } from "../../lib/ids";
-import { applyBeforeCursor, parseLimit } from "../../lib/pagination";
+import { applyBeforeCursor, parseLimit, type BeforeCursor } from "../../lib/pagination";
 import { excludeBlockedUsers } from "../blocks/blocks.service";
 import type { BoardPostDoc } from "../../types/firestore";
 
@@ -22,8 +22,7 @@ function toBoardPostResponse(doc: BoardPostDoc): BoardPostResponse {
   };
 }
 
-export interface ListBoardPostsParams {
-  before?: string;
+export interface ListBoardPostsParams extends BeforeCursor {
   limit?: unknown;
 }
 
@@ -43,7 +42,7 @@ export async function listBoardPosts(
   params: ListBoardPostsParams = {}
 ): Promise<BoardPostResponse[]> {
   let query: Query = db.collection("boardPosts").orderBy("createdAt", "desc");
-  query = applyBeforeCursor(query, params.before);
+  query = applyBeforeCursor(query, params);
   query = query.limit(parseLimit(params.limit));
 
   const snap = await query.get();

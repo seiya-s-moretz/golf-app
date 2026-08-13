@@ -58,7 +58,7 @@ class BoardViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, isLoadingMore = false, errorMessage = null)
             runCatching {
-                val posts = getBoardPostsUseCase(before = null, limit = PAGE_SIZE)
+                val posts = getBoardPostsUseCase(before = null, beforeId = null, limit = PAGE_SIZE)
                 posts to fetchAuthors(posts, emptyMap())
             }.onSuccess { (posts, authors) ->
                 _uiState.value = _uiState.value.copy(
@@ -84,11 +84,16 @@ class BoardViewModel @Inject constructor(
     fun loadMore() {
         val state = _uiState.value
         if (state.isLoading || state.isLoadingMore || !state.hasMore) return
-        val cursor = state.posts.lastOrNull()?.createdAt?.toString() ?: return
+        // カーソルは(created_at, ID)の組。時刻だけだと同時刻の投稿がページ境界で取りこぼされる
+        val last = state.posts.lastOrNull() ?: return
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoadingMore = true, errorMessage = null)
             runCatching {
-                val posts = getBoardPostsUseCase(before = cursor, limit = PAGE_SIZE)
+                val posts = getBoardPostsUseCase(
+                    before = last.createdAt.toString(),
+                    beforeId = last.postId,
+                    limit = PAGE_SIZE
+                )
                 posts to fetchAuthors(posts, _uiState.value.authors)
             }.onSuccess { (posts, authors) ->
                 _uiState.value = _uiState.value.copy(

@@ -12,7 +12,7 @@ interface BoardRepository {
      * [before] はページネーションカーソル（nullの場合は最新から取得）。ブロック除外はサーバー側で
      * 取得後に行われるため、返却件数が[limit]未満でも次ページが存在しうる点に注意。
      */
-    suspend fun getBoardPosts(before: String?, limit: Int): List<BoardPost>
+    suspend fun getBoardPosts(before: String?, beforeId: String?, limit: Int): List<BoardPost>
 
     suspend fun createBoardPost(content: String): BoardPost
 }

@@ -3,7 +3,7 @@ import { db } from "../../config/firebaseAdmin";
 import { AppError } from "../../lib/AppError";
 import { assertValidDocumentId } from "../../lib/documentId";
 import { newId } from "../../lib/ids";
-import { applyBeforeCursor, parseLimit } from "../../lib/pagination";
+import { applyBeforeCursor, parseLimit, type BeforeCursor } from "../../lib/pagination";
 import { buildPairId, normalizePair } from "../../lib/pairId";
 import { assertNotBlocked, excludeBlockedUsers } from "../blocks/blocks.service";
 import { getConnection } from "../connections/connections.service";
@@ -114,7 +114,7 @@ export async function listConversations(userId: string): Promise<ConversationRes
 export async function listMessages(
   requesterUserId: string,
   partnerId: string,
-  before: string | undefined,
+  cursor: BeforeCursor,
   limitRaw: unknown
 ): Promise<MessageResponse[]> {
   assertValidDocumentId(partnerId, "partnerId");
@@ -128,7 +128,7 @@ export async function listMessages(
 
   const pairId = buildPairId(requesterUserId, partnerId);
   let query = db.collection("messages").where("pairId", "==", pairId).orderBy("createdAt", "desc");
-  query = applyBeforeCursor(query, before);
+  query = applyBeforeCursor(query, cursor);
   query = query.limit(parseLimit(limitRaw));
 
   const snap = await query.get();
