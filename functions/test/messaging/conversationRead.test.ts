@@ -87,7 +87,7 @@ describe("会話の既読化とブロック除外", () => {
     expect(data.unreadCountForUserB ?? 0).toBe(0);
   });
 
-  test("ブロックした相手との会話は会話一覧から除外される", async () => {
+  test("ブロックしても会話と履歴は残る（技術設計書5-2章「履歴閲覧は可能、新規送信のみ拒否」）", async () => {
     const { me, partner } = await connectedPair();
     await sendMessage(partner, me.userId, "こんにちは");
 
@@ -96,12 +96,25 @@ describe("会話の既読化とブロック除外", () => {
       .set(...authHeader(me.accessToken))
       .expect(204);
 
-    const res = await request(app)
+    const conversations = await request(app)
       .get("/conversations")
       .set(...authHeader(me.accessToken))
       .expect(200);
-    // 送信すると403になる会話が一覧に残り続けると、閉じる手段が無いまま表示され続けてしまう
-    expect(res.body.find((c: { partner: { user_id: string } }) => c.partner.user_id === partner.userId)).toBeUndefined();
+    expect(
+      conversations.body.find((c: { partner: { user_id: string } }) => c.partner.user_id === partner.userId)
+    ).toBeDefined();
+
+    // 履歴は読めるが、新規送信は拒否される
+    await request(app)
+      .get(`/conversations/${partner.userId}/messages`)
+      .set(...authHeader(me.accessToken))
+      .expect(200);
+    const send = await request(app)
+      .post(`/conversations/${partner.userId}/messages`)
+      .set(...authHeader(me.accessToken))
+      .send({ content: "送れないはず" })
+      .expect(403);
+    expect(send.body.error.code).toBe("BLOCKED");
   });
 
   test("他人のプロフィールには is_admin を含めない（管理者アカウントの列挙防止）", async () => {

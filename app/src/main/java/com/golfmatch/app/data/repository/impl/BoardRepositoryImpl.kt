@@ -11,8 +11,8 @@ class BoardRepositoryImpl @Inject constructor(
     private val api: ApiService
 ) : BoardRepository {
 
-    override suspend fun getBoardPosts(): List<BoardPost> =
-        api.getBoardPosts().map { it.toDomain() }
+    override suspend fun getBoardPosts(before: String?, limit: Int): List<BoardPost> =
+        api.getBoardPosts(before, limit).map { it.toDomain() }
 
     override suspend fun createBoardPost(content: String): BoardPost =
         api.createBoardPost(CreateBoardPostRequestDto(content)).toDomain()

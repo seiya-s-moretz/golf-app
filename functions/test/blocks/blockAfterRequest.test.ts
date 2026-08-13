@@ -121,6 +121,27 @@ describe("申請後にブロックした場合の扱い", () => {
       expect(eventRes.body.current).toBe(0);
     });
 
+    test("ブロックした相手の募集は単体取得でも404になる（一覧と挙動を揃える）", async () => {
+      const { organizer, applicant, eventId } = await createEventAndApply();
+
+      await request(app)
+        .post(`/users/${organizer.userId}/block`)
+        .set(...authHeader(applicant.accessToken))
+        .expect(204);
+
+      const res = await request(app)
+        .get(`/round-events/${eventId}`)
+        .set(...authHeader(applicant.accessToken))
+        .expect(404);
+      expect(res.body.error.code).toBe("NOT_FOUND");
+
+      // 主催者自身は当然取得できる
+      await request(app)
+        .get(`/round-events/${eventId}`)
+        .set(...authHeader(organizer.accessToken))
+        .expect(200);
+    });
+
     test("ブロックした相手の参加申請は一覧から除外される", async () => {
       const { organizer, applicant, eventId, joinRequestId } = await createEventAndApply();
 

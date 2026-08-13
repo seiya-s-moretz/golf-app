@@ -5,7 +5,7 @@ import { assertValidDocumentId } from "../../lib/documentId";
 import { newId } from "../../lib/ids";
 import { applyBeforeCursor, parseLimit } from "../../lib/pagination";
 import { buildPairId, normalizePair } from "../../lib/pairId";
-import { assertNotBlocked, excludeBlockedUsers } from "../blocks/blocks.service";
+import { assertNotBlocked } from "../blocks/blocks.service";
 import { getConnection } from "../connections/connections.service";
 import { toUserResponse, type UserResponse } from "../users/users.service";
 import type { ConnectionDoc, MessageDoc, UserDoc } from "../../types/firestore";
@@ -56,12 +56,12 @@ export async function listConversations(userId: string): Promise<ConversationRes
     db.collection("connections").where("userAId", "==", userId).get(),
     db.collection("connections").where("userBId", "==", userId).get(),
   ]);
-  const allConnectionDocs = [...asUserA.docs, ...asUserB.docs].map((d) => d.data() as ConnectionDoc);
-  // ブロック関係にある相手との会話は一覧から除外する（他の一覧系APIと同じ扱い。技術設計書5-2章）。
-  // 除外しないと、送信すると403になる会話がプレビュー付きで残り続け、閉じる手段が無い
-  const connectionDocs = await excludeBlockedUsers(allConnectionDocs, userId, (c) =>
-    c.userAId === userId ? c.userBId : c.userAId
-  );
+  // ブロック関係にある相手との会話も一覧に残す。技術設計書5-2章のBlock「効果」が
+  // 「既に成立しているConnection・メッセージ履歴は削除しない（ブロック後も履歴閲覧は可能、
+  // 新規送信のみ拒否。証跡保全のため）」と明記しているため、ここで除外すると履歴閲覧の導線が
+  // 失われ設計と矛盾する。「開けるが送れない会話」というUX上の分かりにくさは残るため、
+  // 扱いの見直しは事業判断として`docs/test-plan.md` 4-12章に記録している
+  const connectionDocs = [...asUserA.docs, ...asUserB.docs].map((d) => d.data() as ConnectionDoc);
   if (connectionDocs.length === 0) return [];
 
   const partnerIds = connectionDocs.map((c) => (c.userAId === userId ? c.userBId : c.userAId));
@@ -220,6 +220,13 @@ export async function markConversationRead(requesterUserId: string, partnerId: s
     throw new AppError(403, "FORBIDDEN", "このユーザーとの会話は存在しません");
   }
   const isRequesterA = requesterUserId === userAId;
+
+  // 未読が無ければ全メッセージを読む必要は無い（トーク画面を開くたびに呼ばれるため、
+  // 会話が長いほど無駄な読み取りが積み上がる）
+  const connectionBefore = connectionSnap.data() as ConnectionDoc;
+  const unreadBefore =
+    (isRequesterA ? connectionBefore.unreadCountForUserA : connectionBefore.unreadCountForUserB) ?? 0;
+  if (unreadBefore === 0) return;
 
   // `pairId`単一フィールドの等価条件のみで取得し（自動インデックスのみで足りる）、
   // 相手からの未読メッセージの絞り込みはアプリケーションコード側で行う（MVP規模のメッセージ量を前提とした

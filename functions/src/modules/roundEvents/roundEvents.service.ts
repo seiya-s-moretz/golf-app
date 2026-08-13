@@ -2,7 +2,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import { db } from "../../config/firebaseAdmin";
 import { AppError } from "../../lib/AppError";
 import { newId } from "../../lib/ids";
-import { assertNotBlocked, excludeBlockedUsers } from "../blocks/blocks.service";
+import { assertNotBlocked, excludeBlockedUsers, isBlockedEitherDirection } from "../blocks/blocks.service";
 import { ensureConnection } from "../connections/connections.service";
 import type { RoundEventDoc, RoundJoinRequestDoc, RoundJoinRequestStatus } from "../../types/firestore";
 
@@ -101,8 +101,14 @@ async function getRoundEventDocOrThrow(eventId: string): Promise<RoundEventDoc> 
  * （`getRoundEvent()`）、RoundEventエンティティの単純な単体取得として追加実装した（DeveloperAgent判断）。
  * 挙動に疑義があればArchitectAgentへの確認を推奨する。
  */
-export async function getRoundEvent(eventId: string): Promise<RoundEventResponse> {
-  return toRoundEventResponse(await getRoundEventDocOrThrow(eventId));
+export async function getRoundEvent(eventId: string, requesterUserId: string): Promise<RoundEventResponse> {
+  const event = await getRoundEventDocOrThrow(eventId);
+  // 一覧（listRoundEvents）から除外している募集を、IDを知っていれば単体取得できてしまうのを防ぐ。
+  // 参加申請自体はassertNotBlockedで拒否されるため実害は情報開示に留まるが、一覧と挙動を揃える
+  if (await isBlockedEitherDirection(requesterUserId, event.createdBy)) {
+    throw new AppError(404, "NOT_FOUND", "ラウンド募集が見つかりません");
+  }
+  return toRoundEventResponse(event);
 }
 
 /**
@@ -129,34 +135,38 @@ export async function applyRoundJoin(eventId: string, userId: string): Promise<R
   }
 
   const joinRequestsRef = eventRef.collection("joinRequests");
-  // PENDINGだけでなくAPPROVEDも重複とみなす。承認済みの参加者が再申請できると、
-  // 主催者が承認するたびに同一人物で`current`が加算され定員が食い潰される
-  // （REJECTEDは再申請を許す）
-  const existingSnap = await joinRequestsRef
-    .where("userId", "==", userId)
-    .where("status", "in", ["PENDING", "APPROVED"])
-    .limit(1)
-    .get();
-  if (!existingSnap.empty) {
-    const existing = existingSnap.docs[0].data() as RoundJoinRequestDoc;
-    throw new AppError(
-      409,
-      "CONFLICT",
-      existing.status === "APPROVED" ? "既にこの募集への参加が承認されています" : "既にこの募集へ参加申請済みです"
-    );
-  }
-
   const requestId = newId();
-  const now = Timestamp.now();
-  const doc: RoundJoinRequestDoc = {
-    joinRequestId: requestId,
-    eventId,
-    userId,
-    status: "PENDING",
-    createdAt: now,
-    respondedAt: null,
-  };
-  await joinRequestsRef.doc(requestId).set(doc);
+
+  // 重複チェックと作成をトランザクションにまとめる。分けていると、同一ユーザーの同時POSTが
+  // 双方ともチェックを通過し、PENDINGの申請が2件でき、両方承認されて`current`が二重に減る
+  const doc = await db.runTransaction(async (tx) => {
+    // PENDINGだけでなくAPPROVEDも重複とみなす。承認済みの参加者が再申請できると、
+    // 主催者が承認するたびに同一人物で`current`が加算され定員が食い潰される
+    // （REJECTEDは再申請を許す）
+    const existingSnap = await tx.get(
+      joinRequestsRef.where("userId", "==", userId).where("status", "in", ["PENDING", "APPROVED"]).limit(1)
+    );
+    if (!existingSnap.empty) {
+      const existing = existingSnap.docs[0].data() as RoundJoinRequestDoc;
+      throw new AppError(
+        409,
+        "CONFLICT",
+        existing.status === "APPROVED" ? "既にこの募集への参加が承認されています" : "既にこの募集へ参加申請済みです"
+      );
+    }
+
+    const created: RoundJoinRequestDoc = {
+      joinRequestId: requestId,
+      eventId,
+      userId,
+      status: "PENDING",
+      createdAt: Timestamp.now(),
+      respondedAt: null,
+    };
+    tx.create(joinRequestsRef.doc(requestId), created);
+    return created;
+  });
+
   return toJoinRequestResponse(doc);
 }
 

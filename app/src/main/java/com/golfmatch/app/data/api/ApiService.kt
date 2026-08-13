@@ -121,7 +121,10 @@ interface ApiService {
 
     // 6-6. 掲示板
     @GET("board")
-    suspend fun getBoardPosts(): List<BoardPostDto>
+    suspend fun getBoardPosts(
+        @Query("before") before: String?,
+        @Query("limit") limit: Int
+    ): List<BoardPostDto>
 
     @POST("board")
     suspend fun createBoardPost(@Body body: CreateBoardPostRequestDto): BoardPostDto

@@ -137,8 +137,13 @@ class FakeBoardRepository(
 ) : BoardRepository {
     var lastCreatedContent: String? = null
         private set
+    var lastGetBoardPostsArgs: Pair<String?, Int>? = null
+        private set
 
-    override suspend fun getBoardPosts(): List<BoardPost> = boardPosts
+    override suspend fun getBoardPosts(before: String?, limit: Int): List<BoardPost> {
+        lastGetBoardPostsArgs = before to limit
+        return boardPosts
+    }
 
     override suspend fun createBoardPost(content: String): BoardPost {
         lastCreatedContent = content

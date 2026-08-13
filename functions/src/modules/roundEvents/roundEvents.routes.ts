@@ -41,7 +41,7 @@ roundEventsRoutes.post(
 roundEventsRoutes.get(
   "/:id",
   asyncHandler(async (req, res) => {
-    res.json(await getRoundEvent(req.params.id));
+    res.json(await getRoundEvent(req.params.id, req.currentUser!.userId));
   })
 );
 

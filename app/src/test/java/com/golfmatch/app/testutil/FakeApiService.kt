@@ -89,7 +89,8 @@ open class FakeApiService : ApiService {
 
     override suspend fun rejectMatchRequest(matchRequestId: String): MatchRequestDto = notStubbed("rejectMatchRequest")
 
-    override suspend fun getBoardPosts(): List<BoardPostDto> = notStubbed("getBoardPosts")
+    override suspend fun getBoardPosts(before: String?, limit: Int): List<BoardPostDto> =
+        notStubbed("getBoardPosts")
 
     override suspend fun createBoardPost(body: CreateBoardPostRequestDto): BoardPostDto =
         notStubbed("createBoardPost")

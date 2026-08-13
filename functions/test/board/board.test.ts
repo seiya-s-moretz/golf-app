@@ -45,7 +45,7 @@ describe("GET/POST /board", () => {
     expect(res.body.error.code).toBe("VALIDATION_ERROR");
   });
 
-  test("GET /boardは全ユーザーの投稿を作成日時降順で返す(ページネーション無し、全件取得)", async () => {
+  test("GET /boardは全ユーザーの投稿を作成日時降順で返す", async () => {
     const userA = await registerNewUser(app);
     const userB = await registerNewUser(app);
 
@@ -78,5 +78,59 @@ describe("GET/POST /board", () => {
       .set(...authHeader(user.accessToken))
       .expect(200);
     expect(res.body).toEqual([]);
+  });
+
+  test("limitで件数を絞り込み、beforeカーソルで続きを取得できる", async () => {
+    const user = await registerNewUser(app);
+    for (const content of ["1件目", "2件目", "3件目", "4件目"]) {
+      await request(app)
+        .post("/board")
+        .set(...authHeader(user.accessToken))
+        .send({ content })
+        .expect(201);
+    }
+
+    const firstPage = await request(app)
+      .get("/board?limit=2")
+      .set(...authHeader(user.accessToken))
+      .expect(200);
+    expect(firstPage.body).toHaveLength(2);
+    expect(firstPage.body[0].content).toBe("4件目");
+    expect(firstPage.body[1].content).toBe("3件目");
+
+    const cursor = firstPage.body[1].created_at as string;
+    const secondPage = await request(app)
+      .get(`/board?limit=2&before=${encodeURIComponent(cursor)}`)
+      .set(...authHeader(user.accessToken))
+      .expect(200);
+    expect(secondPage.body).toHaveLength(2);
+    expect(secondPage.body[0].content).toBe("2件目");
+    expect(secondPage.body[1].content).toBe("1件目");
+  });
+
+  test("不正なbefore・limitは黙って無視せず400を返す", async () => {
+    const user = await registerNewUser(app);
+
+    // 無視すると1ページ目が返り続け、ページングするクライアントが無限ループする
+    const badBefore = await request(app)
+      .get("/board?before=garbage")
+      .set(...authHeader(user.accessToken))
+      .expect(400);
+    expect(badBefore.body.error.code).toBe("VALIDATION_ERROR");
+
+    await request(app)
+      .get("/board?limit=abc")
+      .set(...authHeader(user.accessToken))
+      .expect(400);
+  });
+
+  test("contentが長すぎる投稿は400 VALIDATION_ERRORを返す", async () => {
+    const user = await registerNewUser(app);
+    const res = await request(app)
+      .post("/board")
+      .set(...authHeader(user.accessToken))
+      .send({ content: "あ".repeat(1001) })
+      .expect(400);
+    expect(res.body.error.code).toBe("VALIDATION_ERROR");
   });
 });
