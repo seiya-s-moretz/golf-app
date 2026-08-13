@@ -105,7 +105,9 @@ private fun UserList(
             UserCard(
                 user = user,
                 areaName = uiState.areaNames[user.areaId].orEmpty(),
-                isRequested = user.userId in uiState.sentRequestUserIds,
+                // 送信中もボタンを押せないようにする（レスポンス待ちの連打による二重送信防止）
+                isRequested = user.userId in uiState.sentRequestUserIds ||
+                    user.userId in uiState.sendingRequestUserIds,
                 modifier = Modifier.padding(bottom = 12.dp),
                 onSendMatchRequest = { onSendMatchRequest(user) },
                 onReportClick = { onReportUser(user) },

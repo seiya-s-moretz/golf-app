@@ -3,6 +3,7 @@ package com.golfmatch.app.ui.viewmodel
 import androidx.lifecycle.SavedStateHandle
 import com.golfmatch.app.data.auth.AuthSessionManager
 import com.golfmatch.app.domain.model.BoardPost
+import com.golfmatch.app.domain.model.MatchRequest
 import com.golfmatch.app.domain.model.Purpose
 import com.golfmatch.app.domain.model.Report
 import com.golfmatch.app.domain.model.ReportReasonCategory
@@ -10,17 +11,22 @@ import com.golfmatch.app.domain.model.ReportTargetType
 import com.golfmatch.app.domain.model.RoundEvent
 import com.golfmatch.app.domain.model.User
 import com.golfmatch.app.domain.repository.BoardRepository
+import com.golfmatch.app.domain.repository.MatchRepository
 import com.golfmatch.app.domain.repository.ReportRepository
 import com.golfmatch.app.domain.repository.RoundRepository
 import com.golfmatch.app.domain.repository.UserRepository
+import com.golfmatch.app.domain.usecase.BlockUserUseCase
 import com.golfmatch.app.domain.usecase.CreateRoundEventUseCase
 import com.golfmatch.app.domain.usecase.GetAreasUseCase
+import com.golfmatch.app.domain.usecase.GetRecommendUsersUseCase
 import com.golfmatch.app.domain.usecase.GetUserUseCase
 import com.golfmatch.app.domain.usecase.PostBoardMessageUseCase
+import com.golfmatch.app.domain.usecase.SendMatchRequestUseCase
 import com.golfmatch.app.domain.usecase.SubmitReportUseCase
 import com.golfmatch.app.domain.usecase.UpdateUserProfileUseCase
 import com.golfmatch.app.testutil.FakeAreaRepository
 import com.golfmatch.app.testutil.FakeBoardRepository
+import com.golfmatch.app.testutil.FakeMatchRepository
 import com.golfmatch.app.testutil.FakeReportRepository
 import com.golfmatch.app.testutil.FakeRoundRepository
 import com.golfmatch.app.testutil.FakeUserRepository
@@ -123,6 +129,35 @@ class ActionGuardViewModelTest {
         viewModel.submit()
 
         assertEquals(1, callCount)
+    }
+
+    @Test
+    fun `マッチング申請は送信完了を待たずに再タップしても二重送信しない`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        var callCount = 0
+        val repo = object : MatchRepository by FakeMatchRepository() {
+            override suspend fun sendMatchRequest(toUserId: String): MatchRequest {
+                callCount++
+                gate.await()
+                return TestFixtures.matchRequest()
+            }
+        }
+        val viewModel = RecommendViewModel(
+            GetRecommendUsersUseCase(FakeUserRepository()),
+            GetAreasUseCase(FakeAreaRepository()),
+            SendMatchRequestUseCase(repo),
+            BlockUserUseCase(FakeUserRepository())
+        )
+        val target = TestFixtures.user(userId = "user-2")
+
+        // 送信中は`sentRequestUserIds`にまだ入らないため、それだけを見るガードでは弾けない
+        viewModel.sendMatchRequest(target)
+        viewModel.sendMatchRequest(target)
+        gate.complete(Unit)
+
+        assertEquals(1, callCount)
+        assertEquals(setOf("user-2"), viewModel.uiState.value.sentRequestUserIds)
+        assertEquals(emptySet<String>(), viewModel.uiState.value.sendingRequestUserIds)
     }
 
     @Test

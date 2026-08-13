@@ -25,6 +25,8 @@ data class RecommendUiState(
     val users: List<User> = emptyList(),
     val areaNames: Map<String, String> = emptyMap(),
     val sentRequestUserIds: Set<String> = emptySet(),
+    /** マッチング申請の送信中（レスポンス待ち）のユーザーID。連打による二重送信を防ぐ */
+    val sendingRequestUserIds: Set<String> = emptySet(),
     val errorMessage: String? = null
 )
 
@@ -62,16 +64,27 @@ class RecommendViewModel @Inject constructor(
     }
 
     fun sendMatchRequest(user: User) {
-        if (user.userId in _uiState.value.sentRequestUserIds) return
+        val state = _uiState.value
+        // 送信完了を待たずに再タップすると2回送信され、サーバーの重複チェック（409）により
+        // 「既に申請済みです」というエラーが表示される。申請自体は成功しているのに失敗したように
+        // 見えるため、送信中のユーザーIDを保持して弾く
+        if (user.userId in state.sentRequestUserIds || user.userId in state.sendingRequestUserIds) return
         viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                sendingRequestUserIds = _uiState.value.sendingRequestUserIds + user.userId,
+                errorMessage = null
+            )
             runCatching { sendMatchRequestUseCase(user.userId) }
                 .onSuccess {
                     _uiState.value = _uiState.value.copy(
-                        sentRequestUserIds = _uiState.value.sentRequestUserIds + user.userId
+                        sentRequestUserIds = _uiState.value.sentRequestUserIds + user.userId,
+                        sendingRequestUserIds = _uiState.value.sendingRequestUserIds - user.userId
                     )
                 }
                 .onFailure { error ->
+                    // 失敗時は送信中フラグを戻し、再試行できるようにする
                     _uiState.value = _uiState.value.copy(
+                        sendingRequestUserIds = _uiState.value.sendingRequestUserIds - user.userId,
                         errorMessage = error.message ?: "マッチング申請の送信に失敗しました"
                     )
                 }

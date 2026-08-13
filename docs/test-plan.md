@@ -448,6 +448,18 @@ DeveloperAgentは`ReportStatus`リネームに伴い`ReportMapperTest.kt`・`Ent
 
 検証: `npm test`は**220件成功、0失敗**（従来199件＋新規21件）。`./gradlew :app:testDebugUnitTest`は**162件成功、0失敗**（従来158件＋新規4件）。
 
+### 4-11. 一覧画面の再読み込みとマッチング申請の連打（2026-08-13追加、Androidクライアント側レビュー）
+
+1. **【重大】作成・投稿しても一覧に反映されない（画面復帰時の再読み込みが無い）**
+   - `HomeViewModel` / `BoardViewModel` / `MessageListViewModel` はいずれも`init`でしか一覧を取得しない。一方これらの画面はバックスタックに残り続けるため、`CreateRoundContainer`・`CreateBoardPostContainer`が`popBackStack()`で戻ってきてもViewModelは再初期化されず、**「募集を作ったのに一覧に出てこない」「投稿したのに掲示板に出てこない」**状態になる（アプリを再起動するまで反映されない）。メッセージ一覧も、トーク画面から戻っても最新メッセージ・未読件数が更新されない
+   - 修正: `androidx.lifecycle:lifecycle-runtime-compose`を追加し、上記3画面のContainerで`LifecycleResumeEffect`により画面復帰時に再読み込みする。Compose Navigationでは前面に無い画面のバックスタックエントリはRESUMED状態を離れるため、戻ったタイミングで確実に発火する
+   - 対象を一覧が外部要因で変化しうる3画面に限定している（ブロック済み一覧・参加申請一覧は同一画面内の操作で更新されるため対象外）
+2. **マッチング申請の連打で二重送信され、成功しているのにエラーが表示される**
+   - `RecommendViewModel.sendMatchRequest()`のガードが`sentRequestUserIds`（**成功後**に追加される集合）だけを見ていたため、レスポンス待ちの再タップを弾けない。2回目はサーバーの重複チェックで409となり、申請自体は成功しているのに「既にこのユーザーへマッチング申請済みです」というエラーが出る
+   - 修正: 送信中のユーザーIDを保持する`sendingRequestUserIds`を追加し、送信中もボタンを押せないようにした（失敗時はフラグを戻して再試行可能）
+
+検証: `./gradlew :app:testDebugUnitTest`は**163件成功、0失敗**。`:app:assembleDebug`も成功。
+
 ---
 
 ## 5. 結論
