@@ -96,6 +96,25 @@ sdk.dir=<Android SDKのパス>
 ./gradlew :app:assembleDebug
 ```
 
+## デプロイ
+
+```
+cd functions
+npm run deploy:all     # functions + firestore:rules + firestore:indexes をまとめてデプロイ
+```
+
+`npm run deploy`（`firebase deploy --only functions`）は**Functionsしかデプロイしない**。
+Firestoreのセキュリティルール（`firestore.rules`）とインデックス（`firestore.indexes.json`）は
+それぞれ別途デプロイが必要で、忘れると以下の問題が起きる。
+
+| 未デプロイのもの | 起きること |
+|---|---|
+| `firestore.rules` | Firebase Console作成時の初期ルールのまま運用されてしまう。**テストモードで作成していた場合、期限までは誰でも全データを読み書きできる**（APIキーはAPKに同梱されるため秘密ではない） |
+| `firestore.indexes.json` | 複合インデックスを要するクエリ（`GET /areas`、通報一覧、メッセージ履歴など）が実行時に`FAILED_PRECONDITION`で失敗する |
+
+個別に実行する場合は `npm run deploy:rules` / `npm run deploy:indexes`。
+デプロイ済みの内容は Firebase Console の Firestore →「ルール」「インデックス」タブで確認できる。
+
 ## CI（GitHub Actions）
 
 `.github/workflows/ci.yml` により、`main`へのpush・全PR・手動実行（workflow_dispatch）で以下が自動実行される。

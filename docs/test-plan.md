@@ -286,6 +286,7 @@ DeveloperAgentは`ReportStatus`リネームに伴い`ReportMapperTest.kt`・`Ent
 - 対象コード: `app/src/main/java/com/golfmatch/app/data/dto/BlockDto.kt`
 - 技術設計書6-3章のブロック関連API（`POST /users/{id}/block`, `DELETE /users/{id}/block`, `GET /users/me/blocks`）は、`ApiService`上では`GET /users/me/blocks`が`List<UserDto>`を返す実装になっており（`BlockedUsersUiState.blockedUsers: List<User>`と整合させるための妥当な選択）、`BlockDto`はどこからも参照されていない（対応する`BlockMapper`も存在しない）。
 - 動作上の不具合ではなくデッドコードの指摘のみ。ブロック関連の管理API（例:ブロック日時を含む一覧等）を将来追加する場合の設計メモとして残すか、不要であれば削除を検討されたい。バグではないため差し戻し必須ではない。
+- 2026-08-13の棚卸しで再確認: 現在も`BlockDto`は自身の定義以外から参照されておらず、状況は変わっていない（**未解消のまま有効な指摘**）。
 
 ### 4-3. 【軽微・参考】認証フロー画面のViewModelテスト・Repository実装層テストが未整備（2026-08-12追加、バグではない）
 
@@ -293,7 +294,7 @@ DeveloperAgentは`ReportStatus`リネームに伴い`ReportMapperTest.kt`・`Ent
   1. `OtpVerificationViewModel`をはじめとする認証フロー画面のViewModelに対するユニットテストが未整備（`app/src/test/java/com/golfmatch/app/ui/viewmodel/`配下にテストファイルが存在しない）。UIテスト方針そのものが未確定（0章）であることが背景にあるため、UIテスト方針確定時にArchitectAgent/DeveloperAgent/TesterAgentで対象化を協議されたい
   2. `AuthRepositoryImpl.verifyPhoneOtp()`が`is_new_user`による条件分岐（`ExistingUser`時のみ`sessionManager.updateSession`を呼ぶ）を含むようになり、他Repository実装同様の「ApiServiceへの薄い委譲のみ」という前提（0章）から一部逸脱し始めている。`ApiService`のFake/Mock整備とあわせて、`data/repository/impl`配下のテスト対象化を次フェーズで検討する余地がある
 
-### 4-4. 【バグ・要修正】ReportAdminDetailViewModel.save()に多重操作防止ガードが無い（2026-08-12追加、コミット590ebd9検証）
+### 4-4. 【解消済み】ReportAdminDetailViewModel.save()に多重操作防止ガードが無い（2026-08-12追加、コミット590ebd9検証／2026-08-13解消確認）
 
 - 対象コード: `app/src/main/java/com/golfmatch/app/ui/viewmodel/ReportAdminDetailViewModel.kt`
 - 同時期に追加された他画面のガード実装例（一貫性の比較対象）:
@@ -320,6 +321,7 @@ DeveloperAgentは`ReportStatus`リネームに伴い`ReportMapperTest.kt`・`Ent
 - 実際の結果: `isUpdating`中でも`save()`が再実行され、`PATCH /admin/reports/{id}/status`相当のAPI呼び出しが重複しうる
 - 影響: 通報管理画面はMVPでは「状態遷移順序の強制を行わない」設計（ADR-0007）であり、2回目の呼び出しが直ちにデータ不整合を起こすわけではないが、ネットワーク遅延時にボタン連打すると意図せず`handled_by_user_id`/`handled_at`が2回上書きされる、またはUIが最終的にどちらの呼び出し結果を表示するか不定になる可能性がある
 - 差し戻し内容（提案）: `save()`冒頭に`if (state.isUpdating) return`を追加し、他画面のガードパターンと統一する
+- **2026-08-13 解消確認**: 現在の`ReportAdminDetailViewModel.save()`は冒頭に`if (state.isUpdating) return`を持ち、提案どおり他画面のガードパターンと統一されている。再現テストも`save処理中に再度saveを呼んでもUseCaseは1回しか呼ばれない(多重操作防止ガード)`という回帰検知用テストへ書き換え済み。**本項の修正自体は以前のコミットで完了していたが本書が追随していなかった**ため、棚卸しでステータスのみ更新した
 
 ### 4-5. 【解消済み】管理者向け一覧API `GET /admin/reports` のページネーション未実装
 
@@ -351,6 +353,22 @@ DeveloperAgentは`ReportStatus`リネームに伴い`ReportMapperTest.kt`・`Ent
   - 最新メッセージのIDが変わったとき（初回表示・送信直後）のみ末尾へスクロールする。過去読み込みでは末尾IDが変わらないため閲覧位置を奪わない
   - 技術設計書7-2章の`MessageThreadUiState`・`ReportAdminListUiState`定義に追加フィールドと並び順の注記を反映
 - 検証: `MessageThreadViewModelTest`（新規7件）で、新しい順→古い順への反転・カーソル引数・先頭への連結・PAGE_SIZE未満での打ち切り・多重発火ガード・失敗時の`hasOlder`維持・送信メッセージが末尾に入ることを確認。`./gradlew :app:testDebugUnitTest`は117件成功、0失敗
+
+### 4-8. Firestoreセキュリティルール・インデックスのレビュー（2026-08-13追加）
+
+`firestore.rules` / `firestore.indexes.json` はこれまで検証対象外だったため、今回レビューした。
+
+**内容自体は設計どおりで問題なし**:
+
+- `firestore.rules`は全コレクション一律拒否（`allow read, write: if false`）。全APIがCloud Functions（Admin SDK＝ルールをバイパス）経由という設計（技術設計書12-0章・12-7章）と整合しており、認可判定が`middleware`側に一元化されている。`rules_version = '2'`も指定済み
+- `firestore.indexes.json`の7件を、`functions/src`内の全Firestoreクエリと突き合わせて過不足を確認した。複合インデックスが必要なクエリ（`areaMasters`の`isActive`+`displayOrder`、`messages`の`pairId`+`createdAt`、`reports`の`status`+`createdAt`、`matchRequests`の`fromUserId`/`toUserId`+`createdAt`）はすべて定義済み。`before`カーソル付きクエリも`createdAt`が既存インデックスの範囲に収まる。等値フィルタのみを複数持つクエリ（`users`の`phoneNumber`+`phoneVerified`、`joinRequests`の`userId`+`status`）はFirestoreが単一フィールドインデックスのマージで処理できるため追加定義は不要
+
+**発見した2点**:
+
+1. **【要確認】セキュリティルール・インデックスが本番にデプロイされているか未確認**: `functions/package.json`の`deploy`スクリプトは`firebase deploy --only functions`であり、**Functionsしかデプロイしない**。`firestore:rules` / `firestore:indexes`を明示的にデプロイした記録がリポジトリ内のどこにも無い。Firebase ConsoleでFirestoreを「テストモード」で作成していた場合、初期ルールは期限付きの全許可であり、その状態のままだと**APIキー（APKに同梱されるため秘密ではない）を持つ誰でも全データを読み書きできる**。インデックス側が未デプロイの場合は`GET /areas`等が実行時に`FAILED_PRECONDITION`で失敗する。Firebase Console → Firestore →「ルール」「インデックス」タブで実際の状態を確認し、必要なら`npm run deploy:rules` / `npm run deploy:indexes`を実行すること（対応として`deploy:rules`/`deploy:indexes`/`deploy:all`スクリプトとREADMEのデプロイ手順を追加した）
+2. **ルールにテストが無かった**: `@firebase/rules-unit-testing`がdevDependenciesにありながら未使用で、「一律拒否」が実際に効いているかを検証するテストが存在しなかった。Admin SDKを使う既存の統合テストではルールを迂回するため検証不可能である。`functions/test/rules/firestoreRules.test.ts`を新規追加し、主要11コレクションに対して未認証・認証済みのクライアントコンテキストから読み・書き・一覧クエリ・サブコレクションアクセスがすべて拒否されることを確認した（新規24件）。ルールを緩めた場合はここが失敗する
+
+検証: `npm test`は**199件成功、0失敗**（既存175件＋ルール24件）。
 
 ---
 
