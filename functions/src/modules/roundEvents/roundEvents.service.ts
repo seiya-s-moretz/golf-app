@@ -115,6 +115,13 @@ export async function applyRoundJoin(eventId: string, userId: string): Promise<R
   if (!eventSnap.exists) throw new AppError(404, "NOT_FOUND", "ラウンド募集が見つかりません");
   const event = eventSnap.data() as RoundEventDoc;
 
+  // 主催者は自分の募集に参加申請できない。承認すると自分自身とのConnectionが作られ、
+  // 自分との会話が成立してしまううえ、定員も1枠消費される
+  // （マッチング申請の自己申請拒否と同じ扱い。matching.service.ts参照）
+  if (event.createdBy === userId) {
+    throw new AppError(400, "VALIDATION_ERROR", "自分が作成した募集には参加申請できません");
+  }
+
   await assertNotBlocked(userId, event.createdBy);
 
   if (event.capacity <= event.current) {
@@ -122,13 +129,21 @@ export async function applyRoundJoin(eventId: string, userId: string): Promise<R
   }
 
   const joinRequestsRef = eventRef.collection("joinRequests");
-  const duplicateSnap = await joinRequestsRef
+  // PENDINGだけでなくAPPROVEDも重複とみなす。承認済みの参加者が再申請できると、
+  // 主催者が承認するたびに同一人物で`current`が加算され定員が食い潰される
+  // （REJECTEDは再申請を許す）
+  const existingSnap = await joinRequestsRef
     .where("userId", "==", userId)
-    .where("status", "==", "PENDING")
+    .where("status", "in", ["PENDING", "APPROVED"])
     .limit(1)
     .get();
-  if (!duplicateSnap.empty) {
-    throw new AppError(409, "CONFLICT", "既にこの募集へ参加申請済みです");
+  if (!existingSnap.empty) {
+    const existing = existingSnap.docs[0].data() as RoundJoinRequestDoc;
+    throw new AppError(
+      409,
+      "CONFLICT",
+      existing.status === "APPROVED" ? "既にこの募集への参加が承認されています" : "既にこの募集へ参加申請済みです"
+    );
   }
 
   const requestId = newId();
@@ -155,7 +170,11 @@ export async function listJoinRequests(
     throw new AppError(403, "FORBIDDEN", "この募集の主催者のみ参加申請を確認できます");
   }
   const snap = await db.collection("roundEvents").doc(eventId).collection("joinRequests").orderBy("createdAt", "desc").get();
-  return snap.docs.map((d) => toJoinRequestResponse(d.data() as RoundJoinRequestDoc));
+  const requests = snap.docs.map((d) => d.data() as RoundJoinRequestDoc);
+  // ブロック関係にある申請者は一覧から除外する（他の一覧系APIと同じ扱い。技術設計書5-2章）。
+  // 除外しないと、ブロックした相手の申請が主催者に見え続け、承認もできてしまう
+  const visible = await excludeBlockedUsers(requests, requesterUserId, (r) => r.userId);
+  return visible.map(toJoinRequestResponse);
 }
 
 /**
@@ -187,6 +206,10 @@ export async function approveJoinRequest(
     if (event.capacity <= event.current) {
       throw new AppError(409, "CONFLICT", "募集人数が上限に達しているため承認できません");
     }
+    // 申請時（applyRoundJoin）以降にブロックされた可能性があるため、承認時にも再判定する。
+    // これが無いと、ブロック関係のままConnectionが作られ、メッセージを送れない会話が
+    // 双方の一覧に残り続ける（技術設計書5-2章）
+    await assertNotBlocked(request.userId, event.createdBy, tx);
 
     // Connectionの読み取り・（未作成なら）作成を、他の書き込みより前に完了させる
     // （Firestoreトランザクションは全ての読み取りを全ての書き込みより先に行う必要があるため）。

@@ -57,6 +57,9 @@ class CreateRoundViewModel @Inject constructor(
 
     fun submit() {
         val state = _uiState.value
+        // 送信中・送信成功後の二重タップを弾く（他画面と統一）。募集は重複作成されると
+        // 同じ内容の募集が2件並び、参加者が分散してしまう
+        if (state.isSubmitting || state.submitSuccess) return
         val clubName = state.clubName.trim()
         val fee = state.fee.toIntOrNull()
         val capacity = state.capacity.toIntOrNull()

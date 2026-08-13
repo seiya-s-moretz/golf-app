@@ -66,6 +66,9 @@ class ReportViewModel @Inject constructor(
 
     fun submit() {
         val state = _uiState.value
+        // 送信中・送信成功後の二重タップを弾く（他画面と統一）。同一内容の通報が重複すると
+        // 運営の通報管理一覧に同じ案件が並ぶ
+        if (state.isSubmitting || state.submitSuccess) return
         val reasonCategory = state.reasonCategory
         if (reasonCategory == null) {
             _uiState.value = state.copy(errorMessage = "通報理由を選択してください")

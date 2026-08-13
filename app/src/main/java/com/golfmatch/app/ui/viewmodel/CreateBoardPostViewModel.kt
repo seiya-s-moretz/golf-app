@@ -31,6 +31,8 @@ class CreateBoardPostViewModel @Inject constructor(
     }
 
     fun submit() {
+        // 送信中・送信成功後の二重タップを弾く（他画面と統一）。同じ内容の投稿が2件並ぶのを防ぐ
+        if (_uiState.value.isSubmitting || _uiState.value.submitSuccess) return
         val content = _uiState.value.content.trim()
         if (content.isEmpty()) {
             _uiState.value = _uiState.value.copy(errorMessage = "投稿内容を入力してください")

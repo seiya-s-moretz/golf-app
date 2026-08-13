@@ -1,6 +1,7 @@
 import type { Transaction } from "firebase-admin/firestore";
 import { Timestamp } from "firebase-admin/firestore";
 import { db } from "../../config/firebaseAdmin";
+import { AppError } from "../../lib/AppError";
 import { buildPairId, normalizePair } from "../../lib/pairId";
 import type { ConnectionDoc, ConnectionSourceType } from "../../types/firestore";
 
@@ -26,6 +27,12 @@ export interface EnsureConnectionParams {
  * 他の`tx.update`/`tx.set`より前にこの関数を呼び出すこと。
  */
 export async function ensureConnection(params: EnsureConnectionParams, transaction?: Transaction): Promise<void> {
+  // 同一ユーザー同士のConnectionは`connections/{id}_{id}`という壊れたドキュメントになり、
+  // 会話一覧に「自分との会話」が現れる一方でメッセージは送れない状態を作る。
+  // 各呼び出し元でも自己申請を弾いているが、共通の入口としてここでも防ぐ
+  if (params.userIdA === params.userIdB) {
+    throw new AppError(400, "VALIDATION_ERROR", "同一ユーザー間のConnectionは作成できません");
+  }
   const pairId = buildPairId(params.userIdA, params.userIdB);
   const ref = db.collection("connections").doc(pairId);
   const { userAId, userBId } = normalizePair(params.userIdA, params.userIdB);

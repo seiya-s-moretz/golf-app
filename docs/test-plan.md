@@ -409,6 +409,45 @@ DeveloperAgentは`ReportStatus`リネームに伴い`ReportMapperTest.kt`・`Ent
 
 検証: `./gradlew :app:testDebugUnitTest`は**158件成功、0失敗**（従来139件＋新規19件）。`:app:assembleDebug`も成功。
 
+### 4-10. コアループ（ラウンド募集・マッチング・Connection）のコードレビュー結果（2026-08-13追加）
+
+4-9章が認証フローに限定されていたため、アプリのコアループにあたる`functions/src/modules/roundEvents` /
+`matching` / `connections` と、対応するAndroid側を対象にレビューした。**8件を修正、5件を未対応として記録**する。
+
+#### 修正済み
+
+1. **【重大】主催者が自分の募集に参加申請でき、自分自身とのConnectionが作られる**
+   - `applyRoundJoin`に自己申請チェックが無く（`createMatchRequest`には`fromUserId === toUserId`の拒否がある）、承認すると`connections/{id}_{id}`という`userAId === userBId`の壊れたドキュメントが生成される。この文書は`listConversations`の2本のクエリ双方にヒットするため会話一覧に「自分との会話」が重複表示される一方、`sendMessage`は自分宛て送信を400で拒否するため**開くことも消すこともできない会話**が残る。定員も1枠消費される
+   - 修正: `applyRoundJoin`で400を返す。加えて共通の入口である`ensureConnection`にも同一ユーザー拒否を入れ、将来の呼び出し元が同じ誤りを繰り返せないようにした
+2. **【重大】承認済みの参加者が再申請でき、`current`が二重加算される**
+   - 重複チェックが`status == "PENDING"`のみを見ていたため、APPROVED後に再申請でき、主催者が承認するたびに同一人物で定員が消費される（Connectionは冪等なので痕跡が残らない）。capacity 4の募集を1人で埋めることも可能
+   - 修正: `["PENDING", "APPROVED"]`を重複とみなす（REJECTEDは再申請可のまま）
+3. **【重大】`datetime`のバリデーションが緩く、1件の不正データで一覧が全ユーザー分壊れる**
+   - `Date.parse()`は`2026-08-13 10:00`・`2026/08/13`・オフセット無し`2026-09-01T09:00:00`も受理するが、Androidは`kotlinx.datetime.Instant.parse()`で変換するため例外になる。`GET /round-events`はリストを一括変換するので、**誰か1人が不正な形式でPOSTすると一覧全体が全ユーザーで表示不能**になる
+   - 修正: オフセット必須のISO-8601正規表現で入口を厳格化。あわせて`capacity`（1〜100）・`fee`（0〜1,000,000）・`club_name`（100文字）の上限も追加した（他スキーマは`age`・`average_score`・`content`を制限済みで、ここだけ無制限だった）
+4. **申請後にブロックしても承認でき、ブロック関係のままConnectionが作られる**
+   - ブロック判定が申請作成時のみだった。Connectionができると会話一覧には出るのに`sendMessage`は403になるため、**消せない死んだ会話**が双方に残る
+   - 修正: `approveJoinRequest` / `approveMatchRequest`のトランザクション内で`assertNotBlocked(..., tx)`を再実行する（読み取りは全て書き込みより前に配置）
+5. **ブロックした相手の申請が一覧に残り、承認もできてしまう**
+   - `listMyMatchRequests`と`listJoinRequests`だけが`excludeBlockedUsers`を通っていなかった（`listRoundEvents`・`listBoardPosts`・`listRecommendedUsers`は適用済み）
+   - 修正: 両者にブロック除外を適用
+6. **停止中（SUSPENDED）のユーザーがおすすめに出る**
+   - `authenticate`が停止アカウントを弾くため申請しても承認されようがないが、`listRecommendedUsers`は`status`を見ていなかった
+   - 修正: `status === "ACTIVE"`で絞り込む
+7. **Android: 送信系4画面に多重操作防止ガードが無い**（4-4章と同種の積み残し）
+   - `CreateRoundViewModel.submit()` / `CreateBoardPostViewModel.submit()` / `ReportViewModel.submit()` / `MyPageViewModel.save()`。同じ募集や投稿が2件並ぶ、同一案件の通報が運営の一覧に重複する等の実害がある
+   - 修正: 前3者は成功後も塞ぐ（`isSubmitting || submitSuccess`）。プロフィール保存は編集し直しての再保存を許す必要があるため`isSaving`のみで塞ぐ
+
+#### 未対応（記録のみ・要判断）
+
+- **参加申請の重複チェックがトランザクション外**: 重複チェックと`joinRequests.set()`が別々のため、同一ユーザーの同時POSTが2件とも通りうる。上記2の修正で逐次実行時の穴は塞がったが、競合時は残る。トランザクション化が必要
+- **マッチング申請の逆方向重複**: A→BとB→AのPENDINGが併存でき、既にConnectionがある相手にも申請し続けられる。仕様判断（重複とみなすか）を要する
+- **`listRecommendedUsers`が全ユーザー走査＋N+1**: `users`コレクション全件取得に加え、結果ごとに`toUserResponse`が`areaMasters`を個別取得する。MVP規模では動くが、`areaMasters`のマップ化だけでもN+1は解消できる
+- **一覧系APIのページネーション未実装**: 技術設計書10章の非機能要件は`/round-events`・`/users/recommend`・`/board`・`/conversations`をページネーション対応前提としているが、いずれも全件返している（4-5章・4-7章で対応したのは通報一覧とメッセージ履歴のみ）
+- **`GET /round-events/{id}`にブロック除外が無い**: 一覧からは除外されるが、IDを知っていれば単体取得できる。参加申請自体は`assertNotBlocked`で拒否されるため情報開示のみ
+
+検証: `npm test`は**220件成功、0失敗**（従来199件＋新規21件）。`./gradlew :app:testDebugUnitTest`は**162件成功、0失敗**（従来158件＋新規4件）。
+
 ---
 
 ## 5. 結論

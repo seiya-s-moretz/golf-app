@@ -94,6 +94,65 @@ describe("ラウンド募集・参加申請フロー", () => {
     expect(res.body.error.code).toBe("CONFLICT");
   });
 
+  test("主催者は自分の募集へ参加申請できず400 VALIDATION_ERRORを返す", async () => {
+    const organizer = await registerNewUser(app);
+    const event = await createRoundEvent(organizer.accessToken);
+
+    // 承認できてしまうと自分自身とのConnectionが作られ、自分との会話が成立してしまう
+    const res = await request(app)
+      .post(`/round-events/${event.event_id}/join-requests`)
+      .set(...authHeader(organizer.accessToken))
+      .expect(400);
+    expect(res.body.error.code).toBe("VALIDATION_ERROR");
+  });
+
+  test("承認済みのユーザーが同じ募集へ再申請すると409 CONFLICTを返す（currentの二重加算防止）", async () => {
+    const organizer = await registerNewUser(app);
+    const applicant = await registerNewUser(app);
+    const event = await createRoundEvent(organizer.accessToken, { capacity: 4 });
+    const joinRes = await request(app)
+      .post(`/round-events/${event.event_id}/join-requests`)
+      .set(...authHeader(applicant.accessToken))
+      .expect(201);
+    await request(app)
+      .post(`/round-events/${event.event_id}/join-requests/${joinRes.body.join_request_id}/approve`)
+      .set(...authHeader(organizer.accessToken))
+      .expect(200);
+
+    // 重複判定がPENDINGのみだと、ここが通ってしまい同一人物でcurrentが2加算される
+    const res = await request(app)
+      .post(`/round-events/${event.event_id}/join-requests`)
+      .set(...authHeader(applicant.accessToken))
+      .expect(409);
+    expect(res.body.error.code).toBe("CONFLICT");
+
+    const eventRes = await request(app)
+      .get(`/round-events/${event.event_id}`)
+      .set(...authHeader(organizer.accessToken))
+      .expect(200);
+    expect(eventRes.body.current).toBe(1);
+  });
+
+  test("却下されたユーザーは同じ募集へ再申請できる", async () => {
+    const organizer = await registerNewUser(app);
+    const applicant = await registerNewUser(app);
+    const event = await createRoundEvent(organizer.accessToken);
+    const joinRes = await request(app)
+      .post(`/round-events/${event.event_id}/join-requests`)
+      .set(...authHeader(applicant.accessToken))
+      .expect(201);
+    await request(app)
+      .post(`/round-events/${event.event_id}/join-requests/${joinRes.body.join_request_id}/reject`)
+      .set(...authHeader(organizer.accessToken))
+      .expect(200);
+
+    const res = await request(app)
+      .post(`/round-events/${event.event_id}/join-requests`)
+      .set(...authHeader(applicant.accessToken))
+      .expect(201);
+    expect(res.body.status).toBe("PENDING");
+  });
+
   test("capacity <= currentの募集への参加申請は409 CONFLICTを返す（capacity>current検証）", async () => {
     const organizer = await registerNewUser(app);
     const a1 = await registerNewUser(app);

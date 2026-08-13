@@ -63,6 +63,9 @@ export async function listRecommendedUsers(me: UserDoc): Promise<UserResponse[]>
   const scored = snap.docs
     .map((d) => d.data() as UserDoc)
     .filter((u) => u.userId !== me.userId)
+    // 停止中アカウントは`authenticate`が弾くため申請を承認できない。おすすめに出しても
+    // 申請が宙に浮くだけなので除外する（技術設計書5-1章 User.status）
+    .filter((u) => u.status === "ACTIVE")
     .map((u) => ({ user: u, score: calculateRecommendScore(me, u) }))
     .filter(({ score }) => score >= RECOMMEND_THRESHOLD)
     .sort((a, b) => b.score - a.score);
@@ -121,7 +124,13 @@ export async function listMyMatchRequests(
 ): Promise<MatchRequestResponse[]> {
   const field = direction === "received" ? "toUserId" : "fromUserId";
   const snap = await db.collection("matchRequests").where(field, "==", userId).orderBy("createdAt", "desc").get();
-  return snap.docs.map((d) => toMatchRequestResponse(d.data() as MatchRequestDoc));
+  const requests = snap.docs.map((d) => d.data() as MatchRequestDoc);
+  // ブロック関係にある相手の申請は一覧から除外する（他の一覧系APIと同じ扱い。技術設計書5-2章）。
+  // 除外しないと、ブロックした相手からの申請が受信一覧に残り続け、承認もできてしまう
+  const visible = await excludeBlockedUsers(requests, userId, (r) =>
+    direction === "received" ? r.fromUserId : r.toUserId
+  );
+  return visible.map(toMatchRequestResponse);
 }
 
 /**
@@ -144,6 +153,10 @@ export async function approveMatchRequest(
     if (request.status !== "PENDING") {
       throw new AppError(409, "CONFLICT", "このマッチング申請は既に処理済みです");
     }
+    // 申請時（createMatchRequest）以降にブロックされた可能性があるため、承認時にも再判定する。
+    // これが無いと、ブロック関係のままConnectionが作られ、メッセージを送れない会話が
+    // 双方の一覧に残り続ける（技術設計書5-2章）
+    await assertNotBlocked(request.fromUserId, request.toUserId, tx);
 
     // Connectionの読み取り・（未作成なら）作成を、他の書き込みより前に完了させる
     // （Firestoreトランザクションは全ての読み取りを全ての書き込みより先に行う必要があるため。roundEvents.service.tsと同じパターン）。

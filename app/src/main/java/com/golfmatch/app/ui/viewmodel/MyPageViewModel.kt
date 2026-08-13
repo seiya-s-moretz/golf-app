@@ -127,6 +127,10 @@ class MyPageViewModel @Inject constructor(
     fun save() {
         val userId = authSessionManager.currentUserId
         val state = _uiState.value
+        // 保存中の二重タップを弾く（他画面と統一）。プロフィール更新は冪等なので実害は小さいが、
+        // 無駄なリクエストと「どちらの結果が最終表示か不定」な状態を避ける。
+        // `saveSuccess`は編集操作でfalseに戻るため、保存後の再保存は妨げない
+        if (state.isSaving) return
         val areaId = state.areaId
         val age = state.age.toIntOrNull()
         val averageScore = state.averageScore.toIntOrNull()
