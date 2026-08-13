@@ -33,3 +33,18 @@ export async function getAreaById(areaId: string): Promise<AreaMasterDoc | null>
   const snap = await db.collection("areaMasters").doc(areaId).get();
   return snap.exists ? (snap.data() as AreaMasterDoc) : null;
 }
+
+/**
+ * 複数のエリアをまとめて取得する（重複IDは1回にまとめる）。
+ *
+ * ユーザー一覧を返すAPI（おすすめ・会話一覧・ブロック一覧）は、1ユーザーごとに[getAreaById]を
+ * 呼ぶとN+1の読み取りになる。エリアマスタは数件しか無く同じIDに集中するため、
+ * 一覧の組み立て前にここでまとめて引いてMapで使い回す。
+ */
+export async function getAreasByIds(areaIds: string[]): Promise<Map<string, AreaMasterDoc>> {
+  const uniqueIds = [...new Set(areaIds)].filter((id) => id.length > 0);
+  if (uniqueIds.length === 0) return new Map();
+
+  const snaps = await db.getAll(...uniqueIds.map((id) => db.collection("areaMasters").doc(id)));
+  return new Map(snaps.filter((s) => s.exists).map((s) => [s.id, s.data() as AreaMasterDoc]));
+}

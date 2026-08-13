@@ -2,8 +2,8 @@ import * as logger from "firebase-functions/logger";
 import { db } from "../../config/firebaseAdmin";
 import { AppError } from "../../lib/AppError";
 import { assertValidDocumentId } from "../../lib/documentId";
-import { getAreaById, toAreaResponse } from "../areas/areas.service";
-import type { Purpose, UserDoc } from "../../types/firestore";
+import { getAreaById, getAreasByIds, toAreaResponse } from "../areas/areas.service";
+import type { AreaMasterDoc, Purpose, UserDoc } from "../../types/firestore";
 
 type AreaResponse = ReturnType<typeof toAreaResponse>;
 
@@ -36,9 +36,25 @@ export interface UserResponse {
  * `phone_verified`（真偽値）は電話番号自体ではないため、閲覧者を問わず常に含める。
  */
 export async function toUserResponse(userDoc: UserDoc, viewerUserId?: string): Promise<UserResponse> {
-  const areaDoc = await getAreaById(userDoc.areaId);
+  return buildUserResponse(userDoc, await getAreaById(userDoc.areaId), viewerUserId);
+}
+
+/**
+ * 複数ユーザーをまとめてAPIレスポンス形へ変換する（技術設計書6-3章）。
+ *
+ * [toUserResponse]を`map`で回すと、ユーザー1人ごとにエリアマスタを1回読むN+1になる。
+ * 一覧系API（おすすめ・会話一覧・ブロック一覧）は必ずこちらを使い、エリアは一括取得する。
+ */
+export async function toUserResponses(userDocs: UserDoc[], viewerUserId?: string): Promise<UserResponse[]> {
+  const areaDocById = await getAreasByIds(userDocs.map((u) => u.areaId));
+  return userDocs.map((userDoc) =>
+    buildUserResponse(userDoc, areaDocById.get(userDoc.areaId) ?? null, viewerUserId)
+  );
+}
+
+function buildUserResponse(userDoc: UserDoc, areaDoc: AreaMasterDoc | null, viewerUserId?: string): UserResponse {
   if (!areaDoc) {
-    // エリアマスタの欠落はデータ不整合だが、ここで500を投げると`Promise.all`で束ねている
+    // エリアマスタの欠落はデータ不整合だが、ここで500を投げると
     // 一覧系API（会話一覧・ブロック一覧・おすすめ）が**1ユーザーの不整合で全体エラー**になる。
     // 他の参照欠落（会話相手の欠落・通報対象の欠落）と同様に縮退させ、調査用にログだけ残す
     logger.error("ユーザーが参照するエリアが見つかりません", {

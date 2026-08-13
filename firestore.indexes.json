@@ -26,6 +26,15 @@
       ]
     },
     {
+      "_comment": "GET /users/recommend の候補絞り込み（目的一致 かつ スコア差±10）。等値＋範囲の組み合わせのため複合インデックスが必要",
+      "collectionGroup": "users",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "purpose", "order": "ASCENDING" },
+        { "fieldPath": "averageScore", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "matchRequests",
       "queryScope": "COLLECTION",
       "fields": [

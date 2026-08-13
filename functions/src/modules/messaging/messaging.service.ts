@@ -7,7 +7,7 @@ import { applyBeforeCursor, parseLimit, type BeforeCursor } from "../../lib/pagi
 import { buildPairId, normalizePair } from "../../lib/pairId";
 import { assertNotBlocked, excludeBlockedUsers } from "../blocks/blocks.service";
 import { getConnection } from "../connections/connections.service";
-import { toUserResponse, type UserResponse } from "../users/users.service";
+import { toUserResponses, type UserResponse } from "../users/users.service";
 import type { ConnectionDoc, MessageDoc, UserDoc } from "../../types/firestore";
 
 /**
@@ -70,12 +70,15 @@ export async function listConversations(userId: string): Promise<ConversationRes
     partnerSnaps.filter((s) => s.exists).map((s) => [s.id, s.data() as UserDoc])
   );
 
-  const conversations = await Promise.all(
-    connectionDocs.map(async (connection): Promise<ConversationResponse | null> => {
+  // 会話1件ごとにエリアを引くとN+1になるため、相手ユーザーのレスポンスを先に一括生成する
+  const partnerResponses = await toUserResponses([...partnerDocById.values()], userId);
+  const partnerResponseById = new Map(partnerResponses.map((p) => [p.user_id, p]));
+
+  const conversations = connectionDocs.map((connection): ConversationResponse | null => {
       const partnerId = connection.userAId === userId ? connection.userBId : connection.userAId;
-      const partnerDoc = partnerDocById.get(partnerId);
+      const partner = partnerResponseById.get(partnerId);
       // 相手ユーザーが何らかの事情で存在しない（データ不整合）場合は一覧から除外する
-      if (!partnerDoc) return null;
+      if (!partner) return null;
 
       const isUserA = connection.userAId === userId;
       const unreadCount = (isUserA ? connection.unreadCountForUserA : connection.unreadCountForUserB) ?? 0;
@@ -94,13 +97,12 @@ export async function listConversations(userId: string): Promise<ConversationRes
           : null;
 
       return {
-        partner: await toUserResponse(partnerDoc, userId),
+        partner,
         last_message: lastMessage,
         unread_count: unreadCount,
         updated_at: updatedAt.toDate().toISOString(),
       };
-    })
-  );
+  });
 
   return conversations
     .filter((c): c is ConversationResponse => c !== null)

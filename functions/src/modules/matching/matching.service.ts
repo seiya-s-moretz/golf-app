@@ -4,7 +4,7 @@ import { AppError } from "../../lib/AppError";
 import { newId } from "../../lib/ids";
 import { assertNotBlocked, excludeBlockedUsers } from "../blocks/blocks.service";
 import { ensureConnection } from "../connections/connections.service";
-import { toUserResponse, type UserResponse } from "../users/users.service";
+import { toUserResponses, type UserResponse } from "../users/users.service";
 import type { MatchRequestDoc, MatchRequestStatus, UserDoc } from "../../types/firestore";
 
 export interface MatchRequestResponse {
@@ -59,9 +59,8 @@ function calculateRecommendScore(me: UserDoc, other: UserDoc): number {
  * ブロック関係（双方向）にあるユーザーを結果から除外する（Phase3で追加。技術設計書5-2章）。
  */
 export async function listRecommendedUsers(me: UserDoc): Promise<UserResponse[]> {
-  const snap = await db.collection("users").get();
-  const scored = snap.docs
-    .map((d) => d.data() as UserDoc)
+  const candidates = await fetchRecommendCandidates(me);
+  const scored = candidates
     .filter((u) => u.userId !== me.userId)
     // 停止中アカウントは`authenticate`が弾くため申請を承認できない。おすすめに出しても
     // 申請が宙に浮くだけなので除外する（技術設計書5-1章 User.status）
@@ -71,7 +70,45 @@ export async function listRecommendedUsers(me: UserDoc): Promise<UserResponse[]>
     .sort((a, b) => b.score - a.score);
 
   const visible = await excludeBlockedUsers(scored, me.userId, ({ user }) => user.userId);
-  return Promise.all(visible.map(({ user }) => toUserResponse(user, me.userId)));
+  // ユーザー1人ごとにエリアを引くとN+1になるため一括変換する
+  return toUserResponses(
+    visible.map(({ user }) => user),
+    me.userId
+  );
+}
+
+/**
+ * スコアリング対象の候補をクエリで絞り込む（`users`コレクションの全件走査を避ける）。
+ *
+ * 配点は「スコア差±10で40点／エリア一致で40点／目的一致で20点」、閾値は60点。
+ * したがって**60点以上になるには3条件のうち2つ以上を満たす必要がある**。言い換えると、
+ * 推薦対象は必ず次のどちらかに含まれる。
+ *   (A) エリアが一致する（40点。残り20点以上はスコア差か目的で必ず埋まる）
+ *   (B) エリアは違うが「スコア差±10（40点）＋目的一致（20点）」で60点に届く
+ * この2本のクエリの和集合を候補とすれば、**全件走査しても結果は変わらない**（取りこぼしが無い）。
+ * 60点未満の候補が混ざるのは構わない。最終的な採否は従来どおり[calculateRecommendScore]が決める
+ * （スコアリングの正解は1か所のままにし、クエリは候補を狭めるだけに留める）。
+ *
+ * **配点・閾値を変更する場合は、この絞り込み条件も併せて見直すこと**（例えば「エリア一致だけで
+ * 60点」に変えると、上記(A)(B)では拾えない候補が出る）。`recommend.test.ts`に回帰テストがある。
+ */
+async function fetchRecommendCandidates(me: UserDoc): Promise<UserDoc[]> {
+  const [byArea, byPurposeAndScore] = await Promise.all([
+    db.collection("users").where("areaId", "==", me.areaId).get(),
+    db
+      .collection("users")
+      .where("purpose", "==", me.purpose)
+      .where("averageScore", ">=", me.averageScore - SCORE_DIFF_THRESHOLD)
+      .where("averageScore", "<=", me.averageScore + SCORE_DIFF_THRESHOLD)
+      .get(),
+  ]);
+
+  const byUserId = new Map<string, UserDoc>();
+  for (const doc of [...byArea.docs, ...byPurposeAndScore.docs]) {
+    const user = doc.data() as UserDoc;
+    byUserId.set(user.userId, user);
+  }
+  return [...byUserId.values()];
 }
 
 async function getTargetUserOrThrow(userId: string): Promise<UserDoc> {

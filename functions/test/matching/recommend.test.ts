@@ -130,6 +130,34 @@ describe("GET /users/recommend", () => {
     expect(ids).not.toContain(candidate.userId);
   });
 
+  test("候補の絞り込みクエリで取りこぼしが起きない（エリア一致組・エリア不一致でスコア差+目的一致組の両方が返る）", async () => {
+    // `listRecommendedUsers`は全ユーザー走査をやめ、
+    //   (A) エリア一致 (B) 目的一致かつスコア差±10
+    // の2クエリの和集合を候補にしている（matching.service.ts）。
+    // 60点以上のユーザーが必ずどちらかに入ることを、両方の経路を同時に用意して確認する。
+    // 配点・閾値を変更するとこのテストが落ちるはずで、そのときは絞り込み条件の見直しが必要。
+    const areaA = await seedArea();
+    const areaB = await seedArea();
+    const me = await registerNewUser(app, { areaId: areaA, averageScore: 100, purpose: "CASUAL" });
+
+    // (A)経由: エリア一致 + 目的一致 = 60点（スコア差は閾値外）
+    const viaArea = await registerNewUser(app, { areaId: areaA, averageScore: 150, purpose: "CASUAL" });
+    // (B)経由: エリア不一致だがスコア差±10 + 目的一致 = 60点
+    const viaPurposeAndScore = await registerNewUser(app, { areaId: areaB, averageScore: 105, purpose: "CASUAL" });
+    // どちらのクエリにも入るが60点未満（エリア一致のみ=40点）。候補には含まれるが結果には出ない
+    const areaOnly = await registerNewUser(app, { areaId: areaA, averageScore: 150, purpose: "SERIOUS" });
+
+    const res = await request(app)
+      .get("/users/recommend")
+      .set(...authHeader(me.accessToken))
+      .expect(200);
+
+    const ids = res.body.map((u: { user_id: string }) => u.user_id);
+    expect(ids).toContain(viaArea.userId);
+    expect(ids).toContain(viaPurposeAndScore.userId);
+    expect(ids).not.toContain(areaOnly.userId);
+  });
+
   test("結果はスコア降順でソートされる(DeveloperAgent実装判断、技術設計書6-5章に順序の明記は無い)", async () => {
     const areaA = await seedArea();
     const areaB = await seedArea();

@@ -3,7 +3,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import { db } from "../../config/firebaseAdmin";
 import { AppError } from "../../lib/AppError";
 import { assertValidDocumentId } from "../../lib/documentId";
-import { toUserResponse, type UserResponse } from "../users/users.service";
+import { toUserResponses, type UserResponse } from "../users/users.service";
 import type { BlockDoc, UserDoc } from "../../types/firestore";
 
 /**
@@ -56,7 +56,8 @@ export async function listBlockedUsers(blockerUserId: string): Promise<UserRespo
 
   const userSnaps = await db.getAll(...blockedIds.map((id) => db.collection("users").doc(id)));
   const users = userSnaps.filter((s) => s.exists).map((s) => s.data() as UserDoc);
-  return Promise.all(users.map((u) => toUserResponse(u, blockerUserId)));
+  // ユーザー1人ごとにエリアを引くとN+1になるため一括変換する
+  return toUserResponses(users, blockerUserId);
 }
 
 /**
