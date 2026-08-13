@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { asyncHandler } from "../../middleware/asyncHandler";
 import { authenticate } from "../../middleware/authenticate";
-import { listMatchRequestsQuerySchema } from "./matching.validation";
+import { listMatchRequestsQuerySchema, listRecommendedUsersQuerySchema } from "./matching.validation";
 import {
   approveMatchRequest,
   createMatchRequest,
@@ -34,7 +34,8 @@ usersMatchingRoutes.get(
   "/recommend",
   authenticate,
   asyncHandler(async (req, res) => {
-    res.json(await listRecommendedUsers(req.currentUser!.doc));
+    const { before_id: beforeId, limit } = listRecommendedUsersQuerySchema.parse(req.query);
+    res.json(await listRecommendedUsers(req.currentUser!.doc, { beforeId, limit }));
   })
 );
 

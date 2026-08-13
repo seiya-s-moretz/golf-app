@@ -88,6 +88,7 @@ private fun formatDateTime(instant: Instant): String {
 }
 
 private fun previewConversation() = Conversation(
+    conversationId = "user-1_user-2",
     partner = User(
         userId = "user-2",
         name = "田中太郎",

@@ -4,15 +4,22 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
@@ -35,7 +42,8 @@ import kotlinx.datetime.Instant
 @Composable
 fun MessageListScreen(
     uiState: MessageListUiState,
-    onConversationClick: (Conversation) -> Unit = {}
+    onConversationClick: (Conversation) -> Unit = {},
+    onLoadMore: () -> Unit = {}
 ) {
     Scaffold { innerPadding ->
         when {
@@ -43,7 +51,7 @@ fun MessageListScreen(
             uiState.errorMessage != null && uiState.conversations.isEmpty() ->
                 ErrorContent(innerPadding, uiState.errorMessage)
             uiState.conversations.isEmpty() -> EmptyContent(innerPadding)
-            else -> ConversationList(innerPadding, uiState, onConversationClick)
+            else -> ConversationList(innerPadding, uiState, onConversationClick, onLoadMore)
         }
     }
 }
@@ -78,12 +86,28 @@ private fun EmptyContent(padding: PaddingValues) {
     }
 }
 
+/** リスト末尾から何件手前で次ページの読み込みを開始するか */
+private const val LOAD_MORE_THRESHOLD = 3
+
 @Composable
 private fun ConversationList(
     padding: PaddingValues,
     uiState: MessageListUiState,
-    onConversationClick: (Conversation) -> Unit
+    onConversationClick: (Conversation) -> Unit,
+    onLoadMore: () -> Unit
 ) {
+    val listState = rememberLazyListState()
+    val shouldLoadMore by remember(uiState.conversations.size, uiState.hasMore) {
+        derivedStateOf {
+            if (!uiState.hasMore) return@derivedStateOf false
+            val lastVisibleIndex = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: return@derivedStateOf false
+            lastVisibleIndex >= uiState.conversations.size - LOAD_MORE_THRESHOLD
+        }
+    }
+    LaunchedEffect(shouldLoadMore) {
+        if (shouldLoadMore) onLoadMore()
+    }
+
     Column(modifier = Modifier.fillMaxSize().padding(padding)) {
         if (uiState.errorMessage != null) {
             Text(
@@ -92,13 +116,27 @@ private fun ConversationList(
                 modifier = Modifier.padding(16.dp)
             )
         }
-        LazyColumn(modifier = Modifier.fillMaxSize()) {
-            items(uiState.conversations, key = { it.partner.userId }) { conversation ->
+        LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+            items(uiState.conversations, key = { it.conversationId }) { conversation ->
                 ConversationListItem(
                     conversation = conversation,
                     onClick = { onConversationClick(conversation) }
                 )
                 HorizontalDivider()
+            }
+            if (uiState.isLoadingMore) {
+                item(key = "loading-more") {
+                    Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                }
+            } else if (uiState.hasMore && uiState.errorMessage != null) {
+                // 追加読み込みが失敗すると末尾到達では再発火しないため、明示的な再試行導線を出す
+                item(key = "load-more-retry") {
+                    Box(modifier = Modifier.fillMaxWidth().padding(8.dp), contentAlignment = Alignment.Center) {
+                        TextButton(onClick = onLoadMore) { Text("再試行") }
+                    }
+                }
             }
         }
     }
@@ -106,6 +144,7 @@ private fun ConversationList(
 
 private fun previewConversations() = listOf(
     Conversation(
+        conversationId = "user-1_user-2",
         partner = User(
             userId = "user-2",
             name = "田中太郎",

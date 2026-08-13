@@ -32,6 +32,7 @@ fun MessageListContainer(
         uiState = uiState,
         onConversationClick = { conversation ->
             navController.navigate(Route.MessageThread.createRoute(conversation.partner.userId))
-        }
+        },
+        onLoadMore = { viewModel.loadMore() }
     )
 }

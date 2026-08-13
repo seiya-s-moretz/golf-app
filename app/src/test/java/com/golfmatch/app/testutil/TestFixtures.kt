@@ -139,8 +139,10 @@ object TestFixtures {
 
     fun conversation(
         partner: User = user(userId = "user-2"),
-        lastMessage: Message? = message()
+        lastMessage: Message? = message(),
+        conversationId: String = "user-1_${partner.userId}"
     ): Conversation = Conversation(
+        conversationId = conversationId,
         partner = partner,
         lastMessage = lastMessage,
         unreadCount = 1,

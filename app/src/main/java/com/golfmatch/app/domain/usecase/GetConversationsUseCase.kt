@@ -8,5 +8,9 @@ import javax.inject.Inject
 class GetConversationsUseCase @Inject constructor(
     private val messageRepository: MessageRepository
 ) {
-    suspend operator fun invoke(): List<Conversation> = messageRepository.getConversations()
+    suspend operator fun invoke(
+        before: String? = null,
+        beforeId: String? = null,
+        limit: Int = 20
+    ): List<Conversation> = messageRepository.getConversations(before, beforeId, limit)
 }

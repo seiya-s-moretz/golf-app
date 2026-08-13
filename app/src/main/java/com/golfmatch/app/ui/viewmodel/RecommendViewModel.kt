@@ -22,6 +22,8 @@ import javax.inject.Inject
  */
 data class RecommendUiState(
     val isLoading: Boolean = false,
+    val isLoadingMore: Boolean = false,
+    val hasMore: Boolean = false,
     val users: List<User> = emptyList(),
     val areaNames: Map<String, String> = emptyMap(),
     val sentRequestUserIds: Set<String> = emptySet(),
@@ -47,19 +49,60 @@ class RecommendViewModel @Inject constructor(
 
     fun loadRecommendUsers() {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
+            _uiState.value = _uiState.value.copy(isLoading = true, isLoadingMore = false, errorMessage = null)
             runCatching {
-                val users = getRecommendUsersUseCase()
+                val users = getRecommendUsersUseCase(beforeId = null, limit = PAGE_SIZE)
                 val areaNames = getAreasUseCase().associate { it.areaId to it.areaName }
                 users to areaNames
             }.onSuccess { (users, areaNames) ->
-                _uiState.value = _uiState.value.copy(isLoading = false, users = users, areaNames = areaNames)
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    users = users,
+                    areaNames = areaNames,
+                    hasMore = users.size == PAGE_SIZE
+                )
             }.onFailure { error ->
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
+                    hasMore = false,
                     errorMessage = error.message ?: "おすすめユーザー一覧の取得に失敗しました"
                 )
             }
+        }
+    }
+
+    /**
+     * 次ページを取得して末尾に追加する（リスト末尾への到達で呼ばれる）。
+     *
+     * おすすめのカーソルは時刻ではなく**前ページ最後のユーザーID**（スコアはサーバー計算値で
+     * 保存されていないため）。目印のユーザーがブロック等で消えるとサーバーは先頭から返すので、
+     * **`userId`で重複排除してから追加する**。
+     */
+    fun loadMore() {
+        val state = _uiState.value
+        if (state.isLoading || state.isLoadingMore || !state.hasMore) return
+        val lastUserId = state.users.lastOrNull()?.userId ?: return
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoadingMore = true, errorMessage = null)
+            runCatching { getRecommendUsersUseCase(beforeId = lastUserId, limit = PAGE_SIZE) }
+                .onSuccess { users ->
+                    val current = _uiState.value.users
+                    val knownIds = current.map { it.userId }.toSet()
+                    val added = users.filterNot { it.userId in knownIds }
+                    _uiState.value = _uiState.value.copy(
+                        isLoadingMore = false,
+                        users = current + added,
+                        // 重複排除で0件になっても「取得結果が空でない限り続きがある」とみなすと
+                        // 無限ループになるため、実際に追加できた件数で判定する
+                        hasMore = added.isNotEmpty()
+                    )
+                }
+                .onFailure { error ->
+                    _uiState.value = _uiState.value.copy(
+                        isLoadingMore = false,
+                        errorMessage = error.message ?: "おすすめユーザー一覧の取得に失敗しました"
+                    )
+                }
         }
     }
 
@@ -110,5 +153,10 @@ class RecommendViewModel @Inject constructor(
                     )
                 }
         }
+    }
+
+    private companion object {
+        /** サーバー側の`DEFAULT_PAGE_LIMIT`（`functions/src/lib/pagination.ts`）に合わせる */
+        const val PAGE_SIZE = 20
     }
 }

@@ -36,13 +36,17 @@ export async function ensureConnection(params: EnsureConnectionParams, transacti
   const pairId = buildPairId(params.userIdA, params.userIdB);
   const ref = db.collection("connections").doc(pairId);
   const { userAId, userBId } = normalizePair(params.userIdA, params.userIdB);
+  const now = Timestamp.now();
   const doc: ConnectionDoc = {
     connectionId: pairId,
     userAId,
     userBId,
+    participantIds: [userAId, userBId],
     sourceType: params.sourceType,
     sourceId: params.sourceId,
-    createdAt: Timestamp.now(),
+    createdAt: now,
+    // メッセージが無い会話も一覧に出す必要があるため、作成時点で並び替えキーを埋めておく
+    lastActivityAt: now,
   };
 
   if (transaction) {

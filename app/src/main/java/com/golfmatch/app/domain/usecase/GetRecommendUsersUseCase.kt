@@ -8,5 +8,6 @@ import javax.inject.Inject
 class GetRecommendUsersUseCase @Inject constructor(
     private val userRepository: UserRepository
 ) {
-    suspend operator fun invoke(): List<User> = userRepository.getRecommendedUsers()
+    suspend operator fun invoke(beforeId: String? = null, limit: Int = 20): List<User> =
+        userRepository.getRecommendedUsers(beforeId, limit)
 }

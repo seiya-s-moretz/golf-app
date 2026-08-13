@@ -12,8 +12,8 @@ class MessageRepositoryImpl @Inject constructor(
     private val api: ApiService
 ) : MessageRepository {
 
-    override suspend fun getConversations(): List<Conversation> =
-        api.getConversations().map { it.toDomain() }
+    override suspend fun getConversations(before: String?, beforeId: String?, limit: Int): List<Conversation> =
+        api.getConversations(before, beforeId, limit).map { it.toDomain() }
 
     override suspend fun getMessages(
         partnerId: String,

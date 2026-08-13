@@ -21,6 +21,8 @@ data class Message(
  * 会話一覧表示用の集約モデル（`GET /conversations` レスポンス相当、技術設計書 6-7章）
  */
 data class Conversation(
+    /** 会話（Connection）のID。ページネーションのカーソルに使う */
+    val conversationId: String,
     val partner: User,
     val lastMessage: Message?,
     val unreadCount: Int,

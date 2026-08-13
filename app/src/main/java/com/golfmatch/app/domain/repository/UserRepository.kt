@@ -21,7 +21,12 @@ interface UserRepository {
     ): User
 
     /** おすすめユーザー一覧（ブロック関係にあるユーザーはサーバー側で除外済み、技術設計書 6-5章） */
-    suspend fun getRecommendedUsers(): List<User>
+    /**
+     * おすすめユーザー（スコア降順）。[beforeId]は前ページ最後のユーザーID（nullなら先頭から）。
+     * スコアはサーバー計算値のため時刻カーソルは使えず、目印のユーザーが消えた場合は先頭から返る。
+     * 呼び出し側は`userId`で重複排除してから追加すること。
+     */
+    suspend fun getRecommendedUsers(beforeId: String?, limit: Int): List<User>
 
     suspend fun blockUser(userId: String)
 

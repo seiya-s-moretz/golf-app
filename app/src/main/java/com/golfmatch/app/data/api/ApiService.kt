@@ -104,8 +104,16 @@ interface ApiService {
     ): RoundJoinRequestDto
 
     // 6-5. おすすめユーザー・マッチング申請
+    /**
+     * おすすめユーザー（技術設計書6-5章）。スコアはサーバー計算値で保存されていないため、
+     * カーソルは時刻ではなく**前ページ最後のユーザーID**（`before_id`）を使う。
+     * 目印のユーザーが消えた場合はサーバーが先頭から返すため、クライアント側で`userId`の重複排除が必要。
+     */
     @GET("users/recommend")
-    suspend fun getRecommendedUsers(): List<UserDto>
+    suspend fun getRecommendedUsers(
+        @Query("before_id") beforeId: String?,
+        @Query("limit") limit: Int
+    ): List<UserDto>
 
     @POST("users/{id}/match-requests")
     suspend fun sendMatchRequest(@Path("id") toUserId: String): MatchRequestDto
@@ -136,7 +144,11 @@ interface ApiService {
 
     // 6-7. メッセージ
     @GET("conversations")
-    suspend fun getConversations(): List<ConversationDto>
+    suspend fun getConversations(
+        @Query("before") before: String?,
+        @Query("before_id") beforeId: String?,
+        @Query("limit") limit: Int
+    ): List<ConversationDto>
 
     @GET("conversations/{partnerId}/messages")
     suspend fun getMessages(

@@ -36,8 +36,8 @@ class UserRepositoryImpl @Inject constructor(
         )
     ).toDomain()
 
-    override suspend fun getRecommendedUsers(): List<User> =
-        api.getRecommendedUsers().map { it.toDomain() }
+    override suspend fun getRecommendedUsers(beforeId: String?, limit: Int): List<User> =
+        api.getRecommendedUsers(beforeId, limit).map { it.toDomain() }
 
     override suspend fun blockUser(userId: String) = api.blockUser(userId)
 

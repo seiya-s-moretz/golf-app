@@ -522,13 +522,20 @@ DeveloperAgentは`ReportStatus`リネームに伴い`ReportMapperTest.kt`・`Ent
    - **配点・閾値を変えるとこの絞り込み前提が崩れる**（例:「エリア一致だけで60点」にすると(A)(B)で拾えない候補が出る）。`recommend.test.ts`に、(A)経由・(B)経由の両方が返り、40点のユーザーは返らないことを確認する回帰テストを追加した
    - `firestore.indexes.json`に`users`の複合インデックス（`purpose`+`averageScore`）を追加（等値＋範囲の組み合わせのため必須。Emulatorは検知しない）
 
+8. **`GET /conversations`・`GET /users/recommend`のページネーション**（4-10章、2026-08-13追加対応）
+   - **会話一覧**: `Connection`に`participantIds`（参加者ID配列）と`lastActivityAt`（最終更新日時。メッセージが無い会話でも必ず値が入る）を追加し、`array-contains`＋`orderBy`で**1本のクエリ**にした。従来は`userAId==me`と`userBId==me`の2クエリをメモリ上で結合しており、並べ替えもページネーションもできなかった
+     - `lastMessageAt`を並び替えキーにできないのは、**Firestoreの`orderBy`がそのフィールドを持たないドキュメントを結果から除外する**ため（メッセージ未送信の会話が一覧から消える）
+     - レスポンスに`conversation_id`を追加（次ページの`before_id`に使う）。`updated_at`は`lastActivityAt`と一致させ、そのままカーソルに使えるようにした
+     - **本番の`connections`は空のため移行は不要**（テストデータ削除済み。`docs/`外の環境メモ参照）。既存データがある環境では`participantIds`/`lastActivityAt`のバックフィルが必要
+   - **おすすめ**: スコアはサーバー計算値でFirestoreに保存されないため`created_at`カーソルは使えない。**前ページ最後のユーザーID**（`before_id`）を目印にその次から返す方式とし、同点はユーザーIDで固定して並びがぶれないようにした。目印のユーザーがブロック等で消えた場合は先頭から返るため、**クライアント側は`userId`で重複排除してから追加する**（`RecommendViewModel`）
+   - Android側は会話一覧・おすすめの両画面に末尾到達での追加読み込みを実装
+
 #### 引き続き未対応
 
 - ~~**マッチング申請の逆方向重複**（4-10章）~~: **2026-08-13、プロダクトオーナーの決定により「重複できてよい」と確定**（現状の実装のままでよい）。A→BとB→AのPENDINGが併存しても、承認時の`ensureConnection`は冪等であり実害が無いことを確認済み
-- **`GET /users/recommend`・`GET /conversations`のページネーション**（4-10章）: 技術設計書10章の非機能要件は対応を前提としている。ただし会話一覧はConnection数、おすすめは候補クエリの該当数が上限であり、掲示板（対応済み）のように無制限には増えない。
-  会話一覧のページネーションは**データ構造の変更を伴う**点に注意が必要: 現在`Connection`は`userAId`/`userBId`の2フィールドで参加者を持つため「自分の会話を`last_message_at`降順で20件」という**単一クエリが書けない**（2クエリの結果をメモリ上で結合している）。実装するには参加者を配列フィールド（`participantIds`）として持ち`array-contains`で引く形への変更と既存データの移行が必要。**本番にデータがほとんど無い今のうちであれば移行コストはほぼゼロ**である
+**4-10章・4-12章で記録した未対応事項は、これですべて対応または方針確定した。**
 
-検証: `npm test`は**233件成功、0失敗**（`npm run lint`・`npm run build`も成功）。`./gradlew :app:testDebugUnitTest`は**170件成功、0失敗**、`:app:assembleDebug`も成功。
+検証: `npm test`は**235件成功、0失敗**（`npm run lint`・`npm run build`も成功）。`./gradlew :app:testDebugUnitTest`は**170件成功、0失敗**、`:app:assembleDebug`も成功。
 
 ---
 

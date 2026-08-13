@@ -8,12 +8,18 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
@@ -38,7 +44,8 @@ fun RecommendScreen(
     onSendMatchRequest: (User) -> Unit = {},
     onViewMatchRequestsClick: () -> Unit = {},
     onReportUser: (User) -> Unit = {},
-    onBlockUser: (User) -> Unit = {}
+    onBlockUser: (User) -> Unit = {},
+    onLoadMore: () -> Unit = {}
 ) {
     Scaffold { innerPadding ->
         Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
@@ -51,9 +58,9 @@ fun RecommendScreen(
             Box(modifier = Modifier.weight(1f)) {
                 when {
                     uiState.isLoading -> LoadingContent()
-                    uiState.errorMessage != null -> ErrorContent(uiState.errorMessage)
+                    uiState.errorMessage != null && uiState.users.isEmpty() -> ErrorContent(uiState.errorMessage)
                     uiState.users.isEmpty() -> EmptyContent()
-                    else -> UserList(uiState, onSendMatchRequest, onReportUser, onBlockUser)
+                    else -> UserList(uiState, onSendMatchRequest, onReportUser, onBlockUser, onLoadMore)
                 }
             }
         }
@@ -90,29 +97,68 @@ private fun EmptyContent() {
     }
 }
 
+/** リスト末尾から何件手前で次ページの読み込みを開始するか */
+private const val LOAD_MORE_THRESHOLD = 3
+
 @Composable
 private fun UserList(
     uiState: RecommendUiState,
     onSendMatchRequest: (User) -> Unit,
     onReportUser: (User) -> Unit,
-    onBlockUser: (User) -> Unit
+    onBlockUser: (User) -> Unit,
+    onLoadMore: () -> Unit
 ) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp)
-    ) {
-        items(uiState.users, key = { it.userId }) { user ->
-            UserCard(
-                user = user,
-                areaName = uiState.areaNames[user.areaId].orEmpty(),
-                // 送信中もボタンを押せないようにする（レスポンス待ちの連打による二重送信防止）
-                isRequested = user.userId in uiState.sentRequestUserIds ||
-                    user.userId in uiState.sendingRequestUserIds,
-                modifier = Modifier.padding(bottom = 12.dp),
-                onSendMatchRequest = { onSendMatchRequest(user) },
-                onReportClick = { onReportUser(user) },
-                onBlockUser = { onBlockUser(user) }
+    val listState = rememberLazyListState()
+    val shouldLoadMore by remember(uiState.users.size, uiState.hasMore) {
+        derivedStateOf {
+            if (!uiState.hasMore) return@derivedStateOf false
+            val lastVisibleIndex = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: return@derivedStateOf false
+            lastVisibleIndex >= uiState.users.size - LOAD_MORE_THRESHOLD
+        }
+    }
+    LaunchedEffect(shouldLoadMore) {
+        if (shouldLoadMore) onLoadMore()
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        if (uiState.errorMessage != null) {
+            Text(
+                text = uiState.errorMessage,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(16.dp)
             )
+        }
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp)
+        ) {
+            items(uiState.users, key = { it.userId }) { user ->
+                UserCard(
+                    user = user,
+                    areaName = uiState.areaNames[user.areaId].orEmpty(),
+                    // 送信中もボタンを押せないようにする（レスポンス待ちの連打による二重送信防止）
+                    isRequested = user.userId in uiState.sentRequestUserIds ||
+                        user.userId in uiState.sendingRequestUserIds,
+                    modifier = Modifier.padding(bottom = 12.dp),
+                    onSendMatchRequest = { onSendMatchRequest(user) },
+                    onReportClick = { onReportUser(user) },
+                    onBlockUser = { onBlockUser(user) }
+                )
+            }
+            if (uiState.isLoadingMore) {
+                item(key = "loading-more") {
+                    Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                }
+            } else if (uiState.hasMore && uiState.errorMessage != null) {
+                item(key = "load-more-retry") {
+                    Box(modifier = Modifier.fillMaxWidth().padding(8.dp), contentAlignment = Alignment.Center) {
+                        TextButton(onClick = onLoadMore) { Text("再試行") }
+                    }
+                }
+            }
         }
     }
 }

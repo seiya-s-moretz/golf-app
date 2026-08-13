@@ -7,7 +7,12 @@ import com.golfmatch.app.domain.model.Message
  * メッセージのリポジトリ（技術設計書 6-7章、ADR-0004）
  */
 interface MessageRepository {
-    suspend fun getConversations(): List<Conversation>
+    /**
+     * 会話一覧（最終更新順）。[before]・[beforeId]はページネーションカーソル（前ページ末尾の
+     * `updatedAt`と`conversationId`。nullなら先頭から）。
+     * ブロック除外はサーバー側で取得後に行われるため、返却件数が[limit]未満でも次ページが存在しうる。
+     */
+    suspend fun getConversations(before: String?, beforeId: String?, limit: Int): List<Conversation>
 
     /**
      * [partnerId] とのメッセージ履歴取得。Connectionが存在しない場合はサーバー側で403となる。

@@ -1,3 +1,4 @@
+import type { Query } from "firebase-admin/firestore";
 import { Timestamp } from "firebase-admin/firestore";
 import { db } from "../../config/firebaseAdmin";
 import { AppError } from "../../lib/AppError";
@@ -28,6 +29,8 @@ export interface MessageResponse {
 }
 
 export interface ConversationResponse {
+  /** 会話（Connection）のID。次ページ取得時の`before_id`に使う */
+  conversation_id: string;
   partner: UserResponse;
   last_message: MessageResponse | null;
   unread_count: number;
@@ -46,17 +49,34 @@ function toMessageResponse(doc: MessageDoc): MessageResponse {
   };
 }
 
+export interface ListConversationsParams extends BeforeCursor {
+  limit?: unknown;
+}
+
 /**
  * `GET /conversations`（技術設計書6-7章）。自分が関わる会話一覧（Connectionが存在するユーザーペア単位）を
- * 最終更新日時（最新メッセージ送信日時。メッセージが1件も無い場合はConnection作成日時）降順で返す。
+ * 最終更新日時（`lastActivityAt`）降順・カーソル型ページネーション（`before`/`before_id`/`limit`）で返す。
  * `Connection`への非正規化フィールド（技術設計書12-2-3章）を使い、Connection数に比例した追加クエリを避ける。
+ *
+ * `participantIds`（配列）で1本のクエリにまとめている。`userAId`/`userBId`の2クエリに分けると
+ * メモリ上で結合するしかなく、並べ替えもページネーションもできない（`docs/test-plan.md` 4-13章）。
+ *
+ * ブロック除外は取得後にメモリ上で行うため、ページ内の件数が`limit`より少なくなることがある
+ * （クライアントは件数ではなく「1件も返らなくなったか」で終端を判断する）。
  */
-export async function listConversations(userId: string): Promise<ConversationResponse[]> {
-  const [asUserA, asUserB] = await Promise.all([
-    db.collection("connections").where("userAId", "==", userId).get(),
-    db.collection("connections").where("userBId", "==", userId).get(),
-  ]);
-  const allConnectionDocs = [...asUserA.docs, ...asUserB.docs].map((d) => d.data() as ConnectionDoc);
+export async function listConversations(
+  userId: string,
+  params: ListConversationsParams = {}
+): Promise<ConversationResponse[]> {
+  let query: Query = db
+    .collection("connections")
+    .where("participantIds", "array-contains", userId)
+    .orderBy("lastActivityAt", "desc");
+  query = applyBeforeCursor(query, params);
+  query = query.limit(parseLimit(params.limit));
+
+  const snap = await query.get();
+  const allConnectionDocs = snap.docs.map((d) => d.data() as ConnectionDoc);
   // ブロック関係にある相手との会話は一覧に出さない（2026-08-13プロダクトオーナー決定、技術設計書5-2章）。
   // データ自体は証跡として残すが、ブロック中は双方の画面から見えなくする
   const connectionDocs = await excludeBlockedUsers(allConnectionDocs, userId, (c) =>
@@ -82,7 +102,8 @@ export async function listConversations(userId: string): Promise<ConversationRes
 
       const isUserA = connection.userAId === userId;
       const unreadCount = (isUserA ? connection.unreadCountForUserA : connection.unreadCountForUserB) ?? 0;
-      const updatedAt = connection.lastMessageAt ?? connection.createdAt;
+      // 並び順のキーと同じ値を返す（クライアントはこれを次ページ取得の`before`に使う）
+      const updatedAt = connection.lastActivityAt;
       const lastMessage: MessageResponse | null =
         connection.lastMessageId && connection.lastMessageAt
           ? {
@@ -97,6 +118,7 @@ export async function listConversations(userId: string): Promise<ConversationRes
           : null;
 
       return {
+        conversation_id: connection.connectionId,
         partner,
         last_message: lastMessage,
         unread_count: unreadCount,
@@ -104,9 +126,8 @@ export async function listConversations(userId: string): Promise<ConversationRes
       };
   });
 
-  return conversations
-    .filter((c): c is ConversationResponse => c !== null)
-    .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+  // 並び順はFirestore側（lastActivityAt降順）で確定しているため、ここでは並べ替えない
+  return conversations.filter((c): c is ConversationResponse => c !== null);
 }
 
 /**
@@ -194,6 +215,8 @@ export async function sendMessage(
       ? connection.unreadCountForUserB ?? 0
       : connection.unreadCountForUserA ?? 0;
     tx.update(connectionRef, {
+      // 会話一覧の並び替えキー（メッセージ未送信の会話も含めて常に値が入る）
+      lastActivityAt: now,
       lastMessageAt: now,
       lastMessagePreview: content,
       lastMessageId: messageId,

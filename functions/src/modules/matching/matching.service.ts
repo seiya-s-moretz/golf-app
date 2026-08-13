@@ -2,6 +2,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import { db } from "../../config/firebaseAdmin";
 import { AppError } from "../../lib/AppError";
 import { newId } from "../../lib/ids";
+import { parseLimit } from "../../lib/pagination";
 import { assertNotBlocked, excludeBlockedUsers } from "../blocks/blocks.service";
 import { ensureConnection } from "../connections/connections.service";
 import { toUserResponses, type UserResponse } from "../users/users.service";
@@ -58,7 +59,16 @@ function calculateRecommendScore(me: UserDoc, other: UserDoc): number {
  * スコア降順で返す（6章に順序の明記は無いが、推薦の趣旨上スコアの高い順が妥当と判断した。DeveloperAgent判断）。
  * ブロック関係（双方向）にあるユーザーを結果から除外する（Phase3で追加。技術設計書5-2章）。
  */
-export async function listRecommendedUsers(me: UserDoc): Promise<UserResponse[]> {
+export interface ListRecommendedUsersParams {
+  /** 前ページ最後のユーザーID（このユーザーの次から返す） */
+  beforeId?: string;
+  limit?: unknown;
+}
+
+export async function listRecommendedUsers(
+  me: UserDoc,
+  params: ListRecommendedUsersParams = {}
+): Promise<UserResponse[]> {
   const candidates = await fetchRecommendCandidates(me);
   const scored = candidates
     .filter((u) => u.userId !== me.userId)
@@ -67,12 +77,22 @@ export async function listRecommendedUsers(me: UserDoc): Promise<UserResponse[]>
     .filter((u) => u.status === "ACTIVE")
     .map((u) => ({ user: u, score: calculateRecommendScore(me, u) }))
     .filter(({ score }) => score >= RECOMMEND_THRESHOLD)
-    .sort((a, b) => b.score - a.score);
+    // スコア降順。同点はユーザーIDで固定し、ページ間で並びがぶれないようにする
+    .sort((a, b) => b.score - a.score || a.user.userId.localeCompare(b.user.userId));
 
   const visible = await excludeBlockedUsers(scored, me.userId, ({ user }) => user.userId);
-  // ユーザー1人ごとにエリアを引くとN+1になるため一括変換する
+
+  // スコアはサーバー上の計算結果でありFirestoreに保存されていないため、他の一覧のような
+  // `created_at`カーソルは使えない。前ページ最後のユーザーIDを目印にその次から返す。
+  // 目印のユーザーが2回目の取得までに消えた場合（ブロック・停止など）は先頭から返すため、
+  // クライアント側は`user_id`で重複排除してから追加する（`RecommendViewModel`参照）。
+  const anchorIndex = params.beforeId ? visible.findIndex(({ user }) => user.userId === params.beforeId) : -1;
+  const start = anchorIndex >= 0 ? anchorIndex + 1 : 0;
+  const page = visible.slice(start, start + parseLimit(params.limit));
+
+  // ユーザー1人ごとにエリアを引くとN+1になるため一括変換する（ページ分だけ変換する）
   return toUserResponses(
-    visible.map(({ user }) => user),
+    page.map(({ user }) => user),
     me.userId
   );
 }

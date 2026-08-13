@@ -32,6 +32,7 @@ fun RecommendContainer(
         onReportUser = { user ->
             navController.navigate(Route.Report.createRoute(ReportTargetType.USER.name, user.userId))
         },
-        onBlockUser = { user -> viewModel.blockUser(user) }
+        onBlockUser = { user -> viewModel.blockUser(user) },
+        onLoadMore = { viewModel.loadMore() }
     )
 }

@@ -30,6 +30,7 @@ class ConversationMapperTest {
     @Test
     fun `会話一覧DTOは相手ユーザー・最新メッセージ・未読数・更新日時が正しく変換される(技術設計書6-7章)`() {
         val dto = ConversationDto(
+            conversationId = "user-1_user-2",
             partner = userDto("user-2"),
             lastMessage = MessageDto(
                 messageId = "message-1",
@@ -54,6 +55,7 @@ class ConversationMapperTest {
     @Test
     fun `lastMessageがnull(まだメッセージがない会話)でも変換できる`() {
         val dto = ConversationDto(
+            conversationId = "user-1_user-2",
             partner = userDto("user-2"),
             lastMessage = null,
             unreadCount = 0,

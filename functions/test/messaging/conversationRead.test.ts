@@ -160,6 +160,54 @@ describe("会話の既読化とブロック除外", () => {
     expect(selfRes.body.is_admin).toBe(false);
   });
 
+  test("会話一覧はlimitで絞り込み、before/before_idカーソルで続きを取得できる", async () => {
+    const me = await registerNewUser(app);
+    const partners = [];
+    for (let i = 0; i < 3; i++) {
+      // eslint-disable-next-line no-await-in-loop
+      const partner = await registerNewUser(app);
+      // eslint-disable-next-line no-await-in-loop
+      await establishConnection(app, me, partner);
+      partners.push(partner);
+    }
+
+    const firstPage = await request(app)
+      .get("/conversations?limit=2")
+      .set(...authHeader(me.accessToken))
+      .expect(200);
+    expect(firstPage.body).toHaveLength(2);
+
+    const last = firstPage.body[1];
+    const secondPage = await request(app)
+      .get(
+        `/conversations?limit=2&before=${encodeURIComponent(last.updated_at)}&before_id=${last.conversation_id}`
+      )
+      .set(...authHeader(me.accessToken))
+      .expect(200);
+    expect(secondPage.body).toHaveLength(1);
+
+    // 3件が重複なく取得できている（メッセージ未送信の会話も一覧に出る）
+    const ids = [...firstPage.body, ...secondPage.body].map((c: { partner: { user_id: string } }) => c.partner.user_id);
+    expect([...ids].sort()).toEqual(partners.map((p) => p.userId).sort());
+  });
+
+  test("メッセージを送ると会話一覧の先頭に来る（最終更新順）", async () => {
+    const me = await registerNewUser(app);
+    const older = await registerNewUser(app);
+    const newer = await registerNewUser(app);
+    await establishConnection(app, me, older);
+    await establishConnection(app, me, newer);
+
+    // 先に作った会話へ後からメッセージを送ると、その会話が最新になる
+    await sendMessage(me, older.userId, "こんにちは");
+
+    const res = await request(app)
+      .get("/conversations")
+      .set(...authHeader(me.accessToken))
+      .expect(200);
+    expect(res.body[0].partner.user_id).toBe(older.userId);
+  });
+
   test("パス引数に不正なIDを渡しても500ではなく400を返す", async () => {
     const me = await registerNewUser(app);
 

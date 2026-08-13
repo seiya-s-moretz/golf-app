@@ -51,6 +51,16 @@
       ]
     },
     {
+      "_comment": "GET /conversations（自分の会話を最終更新順にページネーション）。参加者配列 + 並び替え + IDのタイブレーク",
+      "collectionGroup": "connections",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "participantIds", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "lastActivityAt", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "messages",
       "queryScope": "COLLECTION",
       "fields": [

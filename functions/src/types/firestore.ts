@@ -114,9 +114,22 @@ export interface ConnectionDoc {
   connectionId: string;
   userAId: string;
   userBId: string;
+  /**
+   * 参加者ID（`[userAId, userBId]`）。`userAId`/`userBId`と重複するが、
+   * `GET /conversations`が**1本のクエリ**で「自分の会話を更新順に」取得するために必要
+   * （2フィールドに分かれていると`userAId==me`と`userBId==me`の2クエリをメモリで結合するしかなく、
+   * 並べ替えもページネーションもできない）。技術設計書12-2-3章、`docs/test-plan.md` 4-13章。
+   */
+  participantIds: string[];
   sourceType: ConnectionSourceType;
   sourceId: string;
   createdAt: Timestamp;
+  /**
+   * 会話一覧の並び順に使う「最終更新日時」。メッセージが1件も無い場合も必ず値が入る（作成時は`createdAt`）。
+   * `lastMessageAt`は未送信の会話で欠落し、Firestoreの`orderBy`は**そのフィールドを持たない
+   * ドキュメントを結果から除外する**ため、並べ替えのキーには使えない。
+   */
+  lastActivityAt: Timestamp;
   /**
    * 会話プレビュー用の非正規化フィールド（Phase3のメッセージ機能が書き込む。技術設計書12-2-3章）。
    * `GET /conversations`が`Message`本体を都度クエリせずに一覧を構築できるよう、最新メッセージの

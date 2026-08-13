@@ -12,6 +12,13 @@ export const sendMessageSchema = z.object({
     .max(MESSAGE_MAX_LENGTH, `contentは${MESSAGE_MAX_LENGTH}文字以内で入力してください`),
 });
 
+/** `GET /conversations`クエリパラメータ（技術設計書6-7章、カーソル型ページネーション）。 */
+export const listConversationsQuerySchema = z.object({
+  before: z.string().optional(),
+  before_id: z.string().optional(),
+  limit: z.string().optional(),
+});
+
 /** `GET /conversations/{partnerId}/messages`クエリパラメータ（技術設計書6-7章）。 */
 export const listMessagesQuerySchema = z.object({
   before: z.string().optional(),

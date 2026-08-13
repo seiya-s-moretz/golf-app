@@ -63,7 +63,7 @@ class FakeUserRepository(
         introduction: String
     ): User = TestFixtures.user(userId = userId, areaId = areaId, purpose = purpose)
 
-    override suspend fun getRecommendedUsers(): List<User> = recommendedUsers
+    override suspend fun getRecommendedUsers(beforeId: String?, limit: Int): List<User> = recommendedUsers
 
     override suspend fun blockUser(userId: String) {
         lastBlockedUserId = userId
@@ -196,7 +196,8 @@ class FakeMessageRepository(
     var lastMarkAsReadPartnerId: String? = null
         private set
 
-    override suspend fun getConversations(): List<Conversation> = conversations
+    override suspend fun getConversations(before: String?, beforeId: String?, limit: Int): List<Conversation> =
+        conversations
 
     override suspend fun getMessages(
         partnerId: String,

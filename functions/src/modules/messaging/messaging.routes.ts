@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { asyncHandler } from "../../middleware/asyncHandler";
 import { authenticate } from "../../middleware/authenticate";
-import { listMessagesQuerySchema, sendMessageSchema } from "./messaging.validation";
+import { listConversationsQuerySchema, listMessagesQuerySchema, sendMessageSchema } from "./messaging.validation";
 import { listConversations, listMessages, markConversationRead, sendMessage } from "./messaging.service";
 
 /** メッセージルーティング（技術設計書6-7章）。`app.ts`で`/conversations`にマウントする。 */
@@ -13,7 +13,8 @@ conversationsRoutes.use(authenticate);
 conversationsRoutes.get(
   "/",
   asyncHandler(async (req, res) => {
-    res.json(await listConversations(req.currentUser!.userId));
+    const { before, before_id: beforeId, limit } = listConversationsQuerySchema.parse(req.query);
+    res.json(await listConversations(req.currentUser!.userId, { before, beforeId, limit }));
   })
 );
 

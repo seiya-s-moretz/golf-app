@@ -78,7 +78,8 @@ open class FakeApiService : ApiService {
     override suspend fun rejectRoundJoinRequest(eventId: String, requestId: String): RoundJoinRequestDto =
         notStubbed("rejectRoundJoinRequest")
 
-    override suspend fun getRecommendedUsers(): List<UserDto> = notStubbed("getRecommendedUsers")
+    override suspend fun getRecommendedUsers(beforeId: String?, limit: Int): List<UserDto> =
+        notStubbed("getRecommendedUsers")
 
     override suspend fun sendMatchRequest(toUserId: String): MatchRequestDto = notStubbed("sendMatchRequest")
 
@@ -95,7 +96,11 @@ open class FakeApiService : ApiService {
     override suspend fun createBoardPost(body: CreateBoardPostRequestDto): BoardPostDto =
         notStubbed("createBoardPost")
 
-    override suspend fun getConversations(): List<ConversationDto> = notStubbed("getConversations")
+    override suspend fun getConversations(
+        before: String?,
+        beforeId: String?,
+        limit: Int
+    ): List<ConversationDto> = notStubbed("getConversations")
 
     override suspend fun getMessages(
         partnerId: String,
