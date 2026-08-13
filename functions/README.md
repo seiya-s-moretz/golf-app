@@ -31,6 +31,10 @@ OTPコードは`ConsoleSmsSender`によりFunctionsエミュレータのログ�
 
 ## Twilio（実SMS送信）の設定
 
+> **本番を実SMS送信へ切り替える際は `docs/twilio-switchover-checklist.md` の手順に従うこと。**
+> 現在の本番は`SMS_PROVIDER=console`によりOTPをCloud Loggingへ平文出力する暫定状態であり、
+> 実ユーザーの受け入れ前に必ず撤去が必要（同チェックリスト0章）。
+
 `POST /auth/phone/otp`のSMS送信実装は`SmsSender`インターフェースの背後で切り替わる（技術設計書12-5章）。
 
 | 環境 | 選択される実装 |
