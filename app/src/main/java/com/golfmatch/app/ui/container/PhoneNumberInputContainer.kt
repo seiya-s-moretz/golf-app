@@ -23,8 +23,11 @@ fun PhoneNumberInputContainer(
     val uiState by viewModel.uiState.collectAsState()
 
     LaunchedEffect(uiState.otpSent) {
-        if (uiState.otpSent) {
-            navController.navigate(Route.OtpVerification.createRoute(uiState.phoneNumber))
+        // 入力そのままではなく、実際にSMSを送った番号（E.164に正規化済み）を渡す。
+        // 入力値を渡すと検証APIがE.164バリデーションで400になり認証を完了できない
+        val phoneNumber = uiState.normalizedPhoneNumber
+        if (uiState.otpSent && phoneNumber != null) {
+            navController.navigate(Route.OtpVerification.createRoute(phoneNumber))
             viewModel.consumeOtpSent()
         }
     }

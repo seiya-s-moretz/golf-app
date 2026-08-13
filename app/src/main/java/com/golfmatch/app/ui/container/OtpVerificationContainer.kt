@@ -36,7 +36,12 @@ fun OtpVerificationContainer(
         } else {
             val token = uiState.registrationToken
             if (token != null) {
-                navController.navigate(Route.InitialProfile.createRoute(token))
+                // OTP認証画面はバックスタックから外す。検証済みのOTPは消費されており戻っても再利用できず、
+                // 残したままだと戻る操作で`verifySuccess=true`のまま再コンポーズされ、即座に前進してしまう
+                // （戻れなくなる）。戻り先は電話番号入力画面とし、番号を入れ直せるようにする
+                navController.navigate(Route.InitialProfile.createRoute(token)) {
+                    popUpTo(Route.PhoneNumberInput.route) { inclusive = false }
+                }
             }
         }
     }

@@ -92,6 +92,35 @@ class AuthFlowViewModelTest {
     }
 
     @Test
+    fun `国内表記の電話番号はE164に正規化して送信しOTP画面へ渡す番号もそちらになる`() = runTest {
+        val repo = FakeAuthRepository()
+        val viewModel = PhoneNumberInputViewModel(RequestPhoneOtpUseCase(repo))
+
+        viewModel.onPhoneNumberChange("090-1234-5678")
+        viewModel.submit()
+
+        // サーバーはE.164しか受け付けない（auth.validation.ts）
+        assertEquals("+819012345678", repo.lastOtpPhoneNumber)
+        // OTP認証画面へは「実際にSMSを送った番号」を渡す必要がある（入力値のままだと検証APIが400になる）
+        assertEquals("+819012345678", viewModel.uiState.value.normalizedPhoneNumber)
+        // 入力欄の表示はユーザーが打った内容のまま
+        assertEquals("090-1234-5678", viewModel.uiState.value.phoneNumber)
+    }
+
+    @Test
+    fun `E164に変換できない電話番号はAPIを呼ばずエラーを表示する`() = runTest {
+        val repo = FakeAuthRepository()
+        val viewModel = PhoneNumberInputViewModel(RequestPhoneOtpUseCase(repo))
+
+        viewModel.onPhoneNumberChange("9012345678")
+        viewModel.submit()
+
+        assertNull(repo.lastOtpPhoneNumber)
+        assertEquals("電話番号の形式が正しくありません（例: 09012345678）", viewModel.uiState.value.errorMessage)
+        assertNull(viewModel.uiState.value.normalizedPhoneNumber)
+    }
+
+    @Test
     fun `電話番号を編集し直すとotpSentとエラーがクリアされる`() = runTest {
         val viewModel = PhoneNumberInputViewModel(RequestPhoneOtpUseCase(FakeAuthRepository()))
 
@@ -185,6 +214,26 @@ class AuthFlowViewModelTest {
         gate.complete(Unit)
 
         assertEquals(1, verifyCallCount)
+    }
+
+    @Test
+    fun `検証成功後にもう一度verifyを呼んでも消費済みOTPで再検証しない`() = runTest {
+        var verifyCallCount = 0
+        val repo = object : AuthRepository by FakeAuthRepository() {
+            override suspend fun verifyPhoneOtp(phoneNumber: String, otpCode: String): PhoneOtpVerificationResult {
+                verifyCallCount++
+                return PhoneOtpVerificationResult.NewUser(RegistrationToken("reg-token-xyz"))
+            }
+        }
+        val viewModel = otpViewModel(repo)
+
+        viewModel.onOtpCodeChange("123456")
+        viewModel.verify()
+        // 画面遷移が完了するまでボタンは操作可能な状態で残るため、成功直後のタップも弾く必要がある
+        viewModel.verify()
+
+        assertEquals(1, verifyCallCount)
+        assertNull(viewModel.uiState.value.errorMessage)
     }
 
     @Test
@@ -312,6 +361,37 @@ class AuthFlowViewModelTest {
 
         assertEquals(1, registerCallCount)
         assertTrue(viewModel.uiState.value.submitSuccess)
+    }
+
+    @Test
+    fun `登録成功後にもう一度submitを呼んでも消費済みregistrationTokenで再登録しない`() = runTest {
+        var registerCallCount = 0
+        val repo = object : AuthRepository by FakeAuthRepository() {
+            override suspend fun registerUser(
+                registrationToken: String,
+                name: String,
+                gender: String,
+                age: Int,
+                areaId: String,
+                averageScore: Int,
+                purpose: Purpose,
+                introduction: String
+            ): AuthSession {
+                registerCallCount++
+                return AuthSession(accessToken = "access-token-1", userId = "user-1")
+            }
+        }
+        val viewModel = initialProfileViewModel(authRepo = repo)
+
+        viewModel.onNameChange("山田太郎")
+        viewModel.onAreaSelected(TestFixtures.area(areaId = "area-1"))
+        viewModel.onAgeChange("30")
+        viewModel.onAverageScoreChange("90")
+        viewModel.submit()
+        viewModel.submit()
+
+        assertEquals(1, registerCallCount)
+        assertNull(viewModel.uiState.value.errorMessage)
     }
 
     // ------------------------------------------------------------------

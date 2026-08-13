@@ -383,6 +383,29 @@ DeveloperAgentは`ReportStatus`リネームに伴い`ReportMapperTest.kt`・`Ent
 
 検証: `npm test`は**199件成功、0失敗**（既存175件＋ルール24件）。
 
+### 4-9. 認証フロー（本人確認）のコードレビュー結果（2026-08-13追加、4件修正・1件未対応）
+
+実機動作確認の前段としてコードレビューを実施し、認証フローで4件の不具合を検出・修正した。いずれも**アプリを起動して最初に触る画面**に集中しており、放置すると新規ユーザーが1人も登録を完了できない。
+
+1. **【重大・修正済み】入力された電話番号がE.164に変換されずサーバーに送られ、必ず400になる**
+   - `PhoneNumberInputScreen`のプレースホルダは`090xxxxxxxx`（国内表記）だが、サーバーの`POST /auth/phone/otp`は`^\+[1-9]\d{1,14}$`（E.164）でしか受け付けない（`functions/src/modules/auth/auth.validation.ts`）。クライアント側に変換処理が存在しなかったため、**プレースホルダどおりに入力した全ユーザーが最初の画面で弾かれる**
+   - 修正: `PhoneNumberNormalizer`（`domain/model/`）を追加し、`submit()`で国内表記→E.164へ変換してから送信する。ハイフン・空白区切りも許容し、変換できない入力はAPIを呼ぶ前に画面側でエラー表示する。`PhoneNumberNormalizerTest`（新規8件）で境界値を検証
+2. **【重大・修正済み】OTP認証画面へ「入力されたままの番号」が渡り、SMSは届くのに検証できない**
+   - `submit()`は`trim()`した番号でAPIを呼ぶ一方、`PhoneNumberInputContainer`は`uiState.phoneNumber`（未加工）で遷移していた。前後に空白が入るとOTPは正規化後の番号に紐づいて発行される（`sha256(phone_number)`がキー）のに、検証APIには空白付きの番号が送られ400になる。#1の変換を入れると差はさらに広がる（`090…`と`+8190…`）
+   - 修正: UiStateに`normalizedPhoneNumber`（実際に送信した番号）を持たせ、遷移にはこちらを使う
+3. **【修正済み】プロフィール初期登録画面から戻れない（無限に前進する）**
+   - 新規ユーザー分岐の`navigate`に`popUpTo`が無く、OTP認証画面が`verifySuccess=true`のままバックスタックに残っていた。戻る操作で再コンポーズされ`LaunchedEffect`が即座に再発火するため、**戻るボタンが効かず番号を入力し直せない**
+   - 修正: `popUpTo(Route.PhoneNumberInput.route)`でOTP画面をバックスタックから外し、戻り先を電話番号入力画面にした（消費済みOTPの画面に戻っても再利用できないため）
+4. **【修正済み】4-3章で追加した多重操作防止ガードが「成功直後」の窓を塞げていなかった**
+   - 成功時に`isVerifying=false, verifySuccess=true`を同時に反映するため、画面遷移が完了するまでの間ボタンが再び有効になる。この窓でのタップは消費済みOTP／`registrationToken`で再送され、まさに防ごうとしていたエラー表示を引き起こす
+   - 修正: `if (state.isVerifying || state.verifySuccess) return` / `if (state.isSubmitting || state.submitSuccess) return` に拡張し、回帰テストを追加
+
+**【未対応・要判断】APIエラーがユーザーに「HTTP 400 Bad Request」の生文字列として表示される**
+
+`NetworkModule`はエラーボディを解釈しておらず、各ViewModelの`error.message`は Retrofit の`HttpException`の既定メッセージ（`HTTP <code> <reason>`）になる。サーバーは`{"error":{"code","message"}}`形式で日本語メッセージを返している（`functions/src/middleware/errorHandler.ts`）のに、それが一切表示されていない。**認証フローに限らず全画面のエラー表示が該当する**横断的な問題であり、共通のエラー変換層（`HttpException`→ドメイン例外）の追加が必要なため、対応方針の判断待ちとして記録する。
+
+検証: `./gradlew :app:testDebugUnitTest`は**151件成功、0失敗**（従来139件＋新規12件）。
+
 ---
 
 ## 5. 結論
