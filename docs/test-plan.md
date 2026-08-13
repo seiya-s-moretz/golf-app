@@ -383,9 +383,9 @@ DeveloperAgentは`ReportStatus`リネームに伴い`ReportMapperTest.kt`・`Ent
 
 検証: `npm test`は**199件成功、0失敗**（既存175件＋ルール24件）。
 
-### 4-9. 認証フロー（本人確認）のコードレビュー結果（2026-08-13追加、4件修正・1件未対応）
+### 4-9. 認証フロー（本人確認）のコードレビュー結果（2026-08-13追加、5件すべて修正済み）
 
-実機動作確認の前段としてコードレビューを実施し、認証フローで4件の不具合を検出・修正した。いずれも**アプリを起動して最初に触る画面**に集中しており、放置すると新規ユーザーが1人も登録を完了できない。
+実機動作確認の前段としてコードレビューを実施し、5件の不具合を検出・修正した。うち4件は**アプリを起動して最初に触る画面**に集中しており、放置すると新規ユーザーが1人も登録を完了できない。5件目はエラー表示に関する全画面横断の問題。
 
 1. **【重大・修正済み】入力された電話番号がE.164に変換されずサーバーに送られ、必ず400になる**
    - `PhoneNumberInputScreen`のプレースホルダは`090xxxxxxxx`（国内表記）だが、サーバーの`POST /auth/phone/otp`は`^\+[1-9]\d{1,14}$`（E.164）でしか受け付けない（`functions/src/modules/auth/auth.validation.ts`）。クライアント側に変換処理が存在しなかったため、**プレースホルダどおりに入力した全ユーザーが最初の画面で弾かれる**
@@ -400,11 +400,14 @@ DeveloperAgentは`ReportStatus`リネームに伴い`ReportMapperTest.kt`・`Ent
    - 成功時に`isVerifying=false, verifySuccess=true`を同時に反映するため、画面遷移が完了するまでの間ボタンが再び有効になる。この窓でのタップは消費済みOTP／`registrationToken`で再送され、まさに防ごうとしていたエラー表示を引き起こす
    - 修正: `if (state.isVerifying || state.verifySuccess) return` / `if (state.isSubmitting || state.submitSuccess) return` に拡張し、回帰テストを追加
 
-**【未対応・要判断】APIエラーがユーザーに「HTTP 400 Bad Request」の生文字列として表示される**
+5. **【重大・修正済み】APIエラーがユーザーに「HTTP 400 Bad Request」の生文字列として表示される**
+   - `NetworkModule`はエラーボディを解釈しておらず、各ViewModelの`error.message`は Retrofit の`HttpException`の既定メッセージ（`HTTP <code> <reason>`）になっていた。サーバーは`{"error":{"code","message"}}`形式で日本語メッセージを返している（`functions/src/middleware/errorHandler.ts`）のに、それが一切表示されていない。**認証フローに限らず全画面のエラー表示が該当する**横断的な問題
+   - 修正: `ApiErrorInterceptor`（`data/api/`）をOkHttpの最外Interceptorとして追加し、エラーレスポンスを[ApiException]（`message`＝サーバーの日本語メッセージ、`code`＝技術設計書12-6章のエラーコード、`httpStatus`）へ、通信失敗を`NetworkException`（「通信に失敗しました。電波状況を確認して…」）へ変換する。**全APIが通る共通経路のためViewModel側の変更は不要**（既存の`error.message`表示パターンがそのまま活きる）
+   - サーバーのエラー形式で返ってこない場合（Cloud Functions自体の停止、インフラ層が返す502/504、空ボディ等）に備え、HTTPステータスごとの日本語フォールバックを用意した。**どの経路でも英語の技術的文言がユーザーに出ないことを優先している**
+   - `ApiException` / `NetworkException`はいずれも`IOException`を継承する（非IOExceptionはOkHttp内部で別扱いになりうるため）
+   - 検証: `ApiErrorInterceptorTest`（新規7件）で、サーバーメッセージの反映・成功レスポンスの素通し・非JSON/空ボディ時のフォールバック・通信エラーの変換・パース失敗時に例外を投げないことを確認
 
-`NetworkModule`はエラーボディを解釈しておらず、各ViewModelの`error.message`は Retrofit の`HttpException`の既定メッセージ（`HTTP <code> <reason>`）になる。サーバーは`{"error":{"code","message"}}`形式で日本語メッセージを返している（`functions/src/middleware/errorHandler.ts`）のに、それが一切表示されていない。**認証フローに限らず全画面のエラー表示が該当する**横断的な問題であり、共通のエラー変換層（`HttpException`→ドメイン例外）の追加が必要なため、対応方針の判断待ちとして記録する。
-
-検証: `./gradlew :app:testDebugUnitTest`は**151件成功、0失敗**（従来139件＋新規12件）。
+検証: `./gradlew :app:testDebugUnitTest`は**158件成功、0失敗**（従来139件＋新規19件）。`:app:assembleDebug`も成功。
 
 ---
 

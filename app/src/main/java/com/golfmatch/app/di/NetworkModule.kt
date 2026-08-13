@@ -1,5 +1,6 @@
 package com.golfmatch.app.di
 
+import com.golfmatch.app.data.api.ApiErrorInterceptor
 import com.golfmatch.app.data.api.ApiService
 import com.golfmatch.app.data.auth.AuthSessionManager
 import com.google.firebase.Firebase
@@ -56,8 +57,14 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideOkHttpClient(authInterceptor: Interceptor): OkHttpClient =
+    fun provideOkHttpClient(
+        apiErrorInterceptor: ApiErrorInterceptor,
+        authInterceptor: Interceptor
+    ): OkHttpClient =
         OkHttpClient.Builder()
+            // 最初に追加したものが最も外側になる。内側のInterceptorが投げる通信エラーも
+            // 表示用メッセージへ変換したいため、エラー変換を最外に置く（技術設計書12-6章）
+            .addInterceptor(apiErrorInterceptor)
             .addInterceptor(authInterceptor)
             .addInterceptor(
                 HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BASIC }
