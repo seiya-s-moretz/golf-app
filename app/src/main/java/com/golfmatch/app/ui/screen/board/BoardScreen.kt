@@ -41,6 +41,7 @@ fun BoardScreen(
     uiState: BoardUiState,
     onCreatePostClick: () -> Unit = {},
     onReportPost: (BoardPost) -> Unit = {},
+    onBlockAuthor: (BoardPost) -> Unit = {},
     onLoadMore: () -> Unit = {}
 ) {
     Scaffold(
@@ -55,7 +56,7 @@ fun BoardScreen(
             uiState.errorMessage != null && uiState.posts.isEmpty() ->
                 ErrorContent(innerPadding, uiState.errorMessage)
             uiState.posts.isEmpty() -> EmptyContent(innerPadding)
-            else -> BoardPostList(innerPadding, uiState, onReportPost, onLoadMore)
+            else -> BoardPostList(innerPadding, uiState, onReportPost, onBlockAuthor, onLoadMore)
         }
     }
 }
@@ -98,6 +99,7 @@ private fun BoardPostList(
     padding: PaddingValues,
     uiState: BoardUiState,
     onReportPost: (BoardPost) -> Unit,
+    onBlockAuthor: (BoardPost) -> Unit,
     onLoadMore: () -> Unit
 ) {
     val listState = rememberLazyListState()
@@ -130,7 +132,8 @@ private fun BoardPostList(
                     post = post,
                     authorName = uiState.authors[post.userId]?.name.orEmpty(),
                     modifier = Modifier.padding(bottom = 12.dp),
-                    onReportClick = { onReportPost(post) }
+                    onReportClick = { onReportPost(post) },
+                    onBlockUser = { onBlockAuthor(post) }
                 )
             }
             if (uiState.isLoadingMore) {

@@ -2,6 +2,7 @@ package com.golfmatch.app.ui.viewmodel
 
 import com.golfmatch.app.domain.model.BoardPost
 import com.golfmatch.app.domain.repository.BoardRepository
+import com.golfmatch.app.domain.usecase.BlockUserUseCase
 import com.golfmatch.app.domain.usecase.GetBoardPostsUseCase
 import com.golfmatch.app.domain.usecase.GetUserUseCase
 import com.golfmatch.app.testutil.FakeBoardRepository
@@ -32,8 +33,11 @@ class BoardViewModelTest {
 
     private val pageSize = 20
 
-    private fun viewModel(repo: BoardRepository) =
-        BoardViewModel(GetBoardPostsUseCase(repo), GetUserUseCase(FakeUserRepository()))
+    private fun viewModel(repo: BoardRepository) = BoardViewModel(
+        GetBoardPostsUseCase(repo),
+        GetUserUseCase(FakeUserRepository()),
+        BlockUserUseCase(FakeUserRepository())
+    )
 
     @Test
     fun `初回はカーソルなしでページサイズ分を取得する`() = runTest {
@@ -99,6 +103,31 @@ class BoardViewModelTest {
         assertEquals(pageSize, state.posts.size)
         assertTrue(state.hasMore)
         assertFalse(state.isLoadingMore)
+    }
+
+    @Test
+    fun `投稿者をブロックするとその投稿が一覧から即時に消える`() = runTest {
+        val repo = PagingBoardRepository(
+            pages = listOf(
+                listOf(
+                    TestFixtures.boardPost(postId = "post-1", userId = "user-1"),
+                    TestFixtures.boardPost(postId = "post-2", userId = "user-2"),
+                    TestFixtures.boardPost(postId = "post-3", userId = "user-1")
+                )
+            )
+        )
+        val userRepo = FakeUserRepository()
+        val viewModel = BoardViewModel(
+            GetBoardPostsUseCase(repo),
+            GetUserUseCase(userRepo),
+            BlockUserUseCase(userRepo)
+        )
+
+        viewModel.blockUser("user-1")
+
+        assertEquals("user-1", userRepo.lastBlockedUserId)
+        // サーバー側の一覧もブロック相手を除外するが、再取得を待たずに手元から消す
+        assertEquals(listOf("post-2"), viewModel.uiState.value.posts.map { it.postId })
     }
 
     /** `created_at`降順の連番ダミーデータ（index順に古くなる） */

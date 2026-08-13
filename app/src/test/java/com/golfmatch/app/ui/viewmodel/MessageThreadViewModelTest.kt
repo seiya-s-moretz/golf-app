@@ -3,6 +3,7 @@ package com.golfmatch.app.ui.viewmodel
 import androidx.lifecycle.SavedStateHandle
 import com.golfmatch.app.domain.model.Message
 import com.golfmatch.app.domain.repository.MessageRepository
+import com.golfmatch.app.domain.usecase.BlockUserUseCase
 import com.golfmatch.app.domain.usecase.GetMessagesUseCase
 import com.golfmatch.app.domain.usecase.GetUserUseCase
 import com.golfmatch.app.domain.usecase.SendMessageUseCase
@@ -44,7 +45,8 @@ class MessageThreadViewModelTest {
         savedStateHandle(),
         GetMessagesUseCase(repo),
         SendMessageUseCase(repo),
-        GetUserUseCase(FakeUserRepository())
+        GetUserUseCase(FakeUserRepository()),
+        BlockUserUseCase(FakeUserRepository())
     )
 
     @Test
@@ -147,6 +149,26 @@ class MessageThreadViewModelTest {
         assertEquals(4, messages.size)
         assertEquals("よろしくお願いします", messages.last().content)
         assertEquals("", viewModel.uiState.value.inputText)
+    }
+
+    @Test
+    fun `会話相手をブロックすると画面を閉じるためのフラグが立つ`() = runTest {
+        val repo = PagingMessageRepository(pages = listOf(newestFirst(0, 3)))
+        val userRepo = FakeUserRepository()
+        val viewModel = MessageThreadViewModel(
+            savedStateHandle(),
+            GetMessagesUseCase(repo),
+            SendMessageUseCase(repo),
+            GetUserUseCase(userRepo),
+            BlockUserUseCase(userRepo)
+        )
+
+        viewModel.blockUser()
+
+        assertEquals(partnerId, userRepo.lastBlockedUserId)
+        // ブロック後はこの会話自体がサーバーから返らなくなるため、画面を閉じて一覧へ戻る
+        assertTrue(viewModel.uiState.value.blockSuccess)
+        assertFalse(viewModel.uiState.value.isBlocking)
     }
 
     /** APIレスポンス相当の新しい順（`created_at`降順）メッセージ列。index が大きいほど古い */

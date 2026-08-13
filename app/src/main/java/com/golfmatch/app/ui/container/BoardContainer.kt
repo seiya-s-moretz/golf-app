@@ -38,6 +38,7 @@ fun BoardContainer(
         onReportPost = { post ->
             navController.navigate(Route.Report.createRoute(ReportTargetType.BOARD_POST.name, post.postId))
         },
+        onBlockAuthor = { post -> viewModel.blockUser(post.userId) },
         onLoadMore = { viewModel.loadMore() }
     )
 }

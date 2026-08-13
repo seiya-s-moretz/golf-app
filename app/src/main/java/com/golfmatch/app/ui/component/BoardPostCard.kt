@@ -52,7 +52,8 @@ fun BoardPostCard(
     post: BoardPost,
     authorName: String,
     modifier: Modifier = Modifier,
-    onReportClick: () -> Unit = {}
+    onReportClick: () -> Unit = {},
+    onBlockUser: () -> Unit = {}
 ) {
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -76,7 +77,11 @@ fun BoardPostCard(
                     Text(text = formatDateTime(post.createdAt), style = MaterialTheme.typography.bodySmall)
                 }
                 Spacer(modifier = Modifier.weight(1f))
-                PostOverflowMenu(onReportClick = onReportClick)
+                PostOverflowMenu(
+                    authorName = authorName,
+                    onReportClick = onReportClick,
+                    onBlockUser = onBlockUser
+                )
             }
             Text(text = post.content, style = MaterialTheme.typography.bodyMedium)
         }
@@ -84,8 +89,10 @@ fun BoardPostCard(
 }
 
 @Composable
-private fun PostOverflowMenu(onReportClick: () -> Unit) {
+private fun PostOverflowMenu(authorName: String, onReportClick: () -> Unit, onBlockUser: () -> Unit) {
     var expanded by remember { mutableStateOf(false) }
+    var showBlockConfirm by remember { mutableStateOf(false) }
+
     Box {
         IconButton(onClick = { expanded = true }) {
             Icon(imageVector = Icons.Filled.MoreVert, contentDescription = "メニュー")
@@ -98,7 +105,25 @@ private fun PostOverflowMenu(onReportClick: () -> Unit) {
                     onReportClick()
                 }
             )
+            DropdownMenuItem(
+                text = { Text("この投稿者をブロックする") },
+                onClick = {
+                    expanded = false
+                    showBlockConfirm = true
+                }
+            )
         }
+    }
+
+    if (showBlockConfirm) {
+        BlockConfirmDialog(
+            userName = authorName,
+            onConfirm = {
+                showBlockConfirm = false
+                onBlockUser()
+            },
+            onDismiss = { showBlockConfirm = false }
+        )
     }
 }
 

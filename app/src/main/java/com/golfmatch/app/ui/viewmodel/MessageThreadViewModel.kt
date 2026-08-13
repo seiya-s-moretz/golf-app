@@ -4,6 +4,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.golfmatch.app.domain.model.Message
+import com.golfmatch.app.domain.usecase.BlockUserUseCase
 import com.golfmatch.app.domain.usecase.GetMessagesUseCase
 import com.golfmatch.app.domain.usecase.GetUserUseCase
 import com.golfmatch.app.domain.usecase.SendMessageUseCase
@@ -35,6 +36,10 @@ data class MessageThreadUiState(
     val messages: List<Message> = emptyList(),
     val inputText: String = "",
     val isSending: Boolean = false,
+    /** ブロック実行中（連打による多重実行を防ぐ） */
+    val isBlocking: Boolean = false,
+    /** ブロック完了。画面を閉じてメッセージ一覧へ戻るためのフラグ（ブロック後は会話自体が表示されなくなる） */
+    val blockSuccess: Boolean = false,
     val errorMessage: String? = null
 )
 
@@ -56,7 +61,8 @@ class MessageThreadViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val getMessagesUseCase: GetMessagesUseCase,
     private val sendMessageUseCase: SendMessageUseCase,
-    private val getUserUseCase: GetUserUseCase
+    private val getUserUseCase: GetUserUseCase,
+    private val blockUserUseCase: BlockUserUseCase
 ) : ViewModel() {
 
     private val partnerId: String =
@@ -146,6 +152,29 @@ class MessageThreadViewModel @Inject constructor(
                     _uiState.value = _uiState.value.copy(
                         isSending = false,
                         errorMessage = error.message ?: "メッセージの送信に失敗しました"
+                    )
+                }
+        }
+    }
+
+    /**
+     * 会話相手をブロックする（技術設計書7-3章の通報・ブロック導線、5-2章）。
+     *
+     * ブロック後はこの会話自体がサーバーから返らなくなる（会話一覧から除外され、履歴取得も403）ため、
+     * 成功したら[MessageThreadUiState.blockSuccess]を立てて画面を閉じる。
+     */
+    fun blockUser() {
+        if (_uiState.value.isBlocking || _uiState.value.blockSuccess) return
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isBlocking = true, errorMessage = null)
+            runCatching { blockUserUseCase(partnerId) }
+                .onSuccess {
+                    _uiState.value = _uiState.value.copy(isBlocking = false, blockSuccess = true)
+                }
+                .onFailure { error ->
+                    _uiState.value = _uiState.value.copy(
+                        isBlocking = false,
+                        errorMessage = error.message ?: "ブロックに失敗しました"
                     )
                 }
         }

@@ -95,13 +95,13 @@ fun UserCard(
                 Text(text = if (isRequested) "申請済み" else "申請する")
             }
 
-            UserOverflowMenu(onReportClick = onReportClick, onBlockUser = onBlockUser)
+            UserOverflowMenu(userName = user.name, onReportClick = onReportClick, onBlockUser = onBlockUser)
         }
     }
 }
 
 @Composable
-private fun UserOverflowMenu(onReportClick: () -> Unit, onBlockUser: () -> Unit) {
+private fun UserOverflowMenu(userName: String, onReportClick: () -> Unit, onBlockUser: () -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     var showBlockConfirm by remember { mutableStateOf(false) }
 
@@ -128,30 +128,13 @@ private fun UserOverflowMenu(onReportClick: () -> Unit, onBlockUser: () -> Unit)
     }
 
     if (showBlockConfirm) {
-        AlertDialog(
-            onDismissRequest = { showBlockConfirm = false },
-            title = { Text("ユーザーをブロックしますか？") },
-            // ブロック中は既存の会話・メッセージ履歴も表示されなくなる（技術設計書5-2章、2026-08-13決定）。
-            // 誤操作で会話が見えなくなるため、影響をダイアログに明記してから実行する
-            text = {
-                Text(
-                    "ブロックすると、おすすめユーザー・掲示板への表示や申請・メッセージの送受信ができなくなります。" +
-                        "これまでのやりとりも表示されなくなります（ブロックを解除すると元に戻ります）。"
-                )
+        BlockConfirmDialog(
+            userName = userName,
+            onConfirm = {
+                showBlockConfirm = false
+                onBlockUser()
             },
-            confirmButton = {
-                TextButton(onClick = {
-                    showBlockConfirm = false
-                    onBlockUser()
-                }) {
-                    Text("ブロックする")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showBlockConfirm = false }) {
-                    Text("キャンセル")
-                }
-            }
+            onDismiss = { showBlockConfirm = false }
         )
     }
 }

@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -13,7 +14,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -26,12 +30,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.golfmatch.app.domain.model.Message
+import com.golfmatch.app.ui.component.BlockConfirmDialog
 import com.golfmatch.app.ui.component.MessageBubble
 import com.golfmatch.app.ui.theme.GolfMatchTheme
 import com.golfmatch.app.ui.viewmodel.MessageThreadUiState
@@ -53,7 +60,9 @@ fun MessageThreadScreen(
     uiState: MessageThreadUiState,
     onInputTextChange: (String) -> Unit = {},
     onSendClick: () -> Unit = {},
-    onLoadOlder: () -> Unit = {}
+    onLoadOlder: () -> Unit = {},
+    onBlockUser: () -> Unit = {},
+    onReportUser: () -> Unit = {}
 ) {
     Scaffold(
         bottomBar = {
@@ -69,7 +78,7 @@ fun MessageThreadScreen(
             uiState.isLoading -> LoadingContent(innerPadding)
             uiState.errorMessage != null && uiState.messages.isEmpty() ->
                 ErrorContent(innerPadding, uiState.errorMessage)
-            else -> MessageThreadContent(innerPadding, uiState, onLoadOlder)
+            else -> MessageThreadContent(innerPadding, uiState, onLoadOlder, onBlockUser, onReportUser)
         }
     }
 }
@@ -101,7 +110,9 @@ private const val LOAD_OLDER_THRESHOLD = 3
 private fun MessageThreadContent(
     padding: PaddingValues,
     uiState: MessageThreadUiState,
-    onLoadOlder: () -> Unit
+    onLoadOlder: () -> Unit,
+    onBlockUser: () -> Unit,
+    onReportUser: () -> Unit
 ) {
     val listState = rememberLazyListState()
     val shouldLoadOlder by remember(uiState.messages.size, uiState.hasOlder) {
@@ -119,11 +130,20 @@ private fun MessageThreadContent(
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-        Text(
-            text = uiState.partnerName.ifEmpty { "トーク" },
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.padding(16.dp)
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = uiState.partnerName.ifEmpty { "トーク" },
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(16.dp)
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            // 会話相手への通報・ブロック導線（技術設計書7-3章）。トーク画面から離脱せずに対処できるようにする
+            PartnerOverflowMenu(
+                partnerName = uiState.partnerName,
+                onReportUser = onReportUser,
+                onBlockUser = onBlockUser
+            )
+        }
         HorizontalDivider()
 
         if (uiState.errorMessage != null) {
@@ -159,6 +179,45 @@ private fun MessageThreadContent(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun PartnerOverflowMenu(partnerName: String, onReportUser: () -> Unit, onBlockUser: () -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    var showBlockConfirm by remember { mutableStateOf(false) }
+
+    Box {
+        IconButton(onClick = { expanded = true }) {
+            Icon(imageVector = Icons.Filled.MoreVert, contentDescription = "メニュー")
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenuItem(
+                text = { Text("通報する") },
+                onClick = {
+                    expanded = false
+                    onReportUser()
+                }
+            )
+            DropdownMenuItem(
+                text = { Text("このユーザーをブロックする") },
+                onClick = {
+                    expanded = false
+                    showBlockConfirm = true
+                }
+            )
+        }
+    }
+
+    if (showBlockConfirm) {
+        BlockConfirmDialog(
+            userName = partnerName,
+            onConfirm = {
+                showBlockConfirm = false
+                onBlockUser()
+            },
+            onDismiss = { showBlockConfirm = false }
+        )
     }
 }
 

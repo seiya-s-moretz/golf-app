@@ -92,6 +92,7 @@ class ActionGuardViewModelTest {
             }
         }
         val viewModel = CreateBoardPostViewModel(PostBoardMessageUseCase(repo))
+        // 投稿作成のガードは掲示板一覧のブロック導線とは独立（CreateBoardPostViewModelは投稿のみを担う）
 
         viewModel.onContentChange("一緒に回りませんか")
         viewModel.submit()

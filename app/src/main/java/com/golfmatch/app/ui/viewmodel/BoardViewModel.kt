@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.golfmatch.app.domain.model.BoardPost
 import com.golfmatch.app.domain.model.User
+import com.golfmatch.app.domain.usecase.BlockUserUseCase
 import com.golfmatch.app.domain.usecase.GetBoardPostsUseCase
 import com.golfmatch.app.domain.usecase.GetUserUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -28,6 +29,8 @@ data class BoardUiState(
     val hasMore: Boolean = false,
     val posts: List<BoardPost> = emptyList(),
     val authors: Map<String, User> = emptyMap(),
+    /** ブロック処理中のユーザーID（連打による多重実行を防ぐ） */
+    val blockingUserIds: Set<String> = emptySet(),
     val errorMessage: String? = null
 )
 
@@ -40,7 +43,8 @@ data class BoardUiState(
 @HiltViewModel
 class BoardViewModel @Inject constructor(
     private val getBoardPostsUseCase: GetBoardPostsUseCase,
-    private val getUserUseCase: GetUserUseCase
+    private val getUserUseCase: GetUserUseCase,
+    private val blockUserUseCase: BlockUserUseCase
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(BoardUiState())
@@ -102,6 +106,34 @@ class BoardViewModel @Inject constructor(
                     errorMessage = error.message ?: "掲示板投稿一覧の取得に失敗しました"
                 )
             }
+        }
+    }
+
+    /**
+     * 投稿者をブロックする（技術設計書7-3章の通報・ブロック導線、5-2章）。
+     * サーバー側の`GET /board`はブロック関係のユーザーの投稿を除外するため、
+     * 成功後は手元の一覧からも即時に取り除く（再取得を待たずに反映する）。
+     */
+    fun blockUser(userId: String) {
+        if (userId in _uiState.value.blockingUserIds) return
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                blockingUserIds = _uiState.value.blockingUserIds + userId,
+                errorMessage = null
+            )
+            runCatching { blockUserUseCase(userId) }
+                .onSuccess {
+                    _uiState.value = _uiState.value.copy(
+                        posts = _uiState.value.posts.filterNot { it.userId == userId },
+                        blockingUserIds = _uiState.value.blockingUserIds - userId
+                    )
+                }
+                .onFailure { error ->
+                    _uiState.value = _uiState.value.copy(
+                        blockingUserIds = _uiState.value.blockingUserIds - userId,
+                        errorMessage = error.message ?: "ブロックに失敗しました"
+                    )
+                }
         }
     }
 
