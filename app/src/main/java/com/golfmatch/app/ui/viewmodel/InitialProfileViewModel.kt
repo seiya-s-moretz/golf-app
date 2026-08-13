@@ -105,6 +105,9 @@ class InitialProfileViewModel @Inject constructor(
 
     fun submit() {
         val state = _uiState.value
+        // 登録中の二重タップを弾く（他画面のガードパターンと統一）。`registrationToken`は登録成功時に
+        // 消費されるため、重複呼び出しの2回目は失敗しエラー表示が残ってしまう
+        if (state.isSubmitting) return
         val areaId = state.areaId
         val age = state.age.toIntOrNull()
         val averageScore = state.averageScore.toIntOrNull()

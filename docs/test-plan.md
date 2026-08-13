@@ -288,11 +288,24 @@ DeveloperAgentは`ReportStatus`リネームに伴い`ReportMapperTest.kt`・`Ent
 - 動作上の不具合ではなくデッドコードの指摘のみ。ブロック関連の管理API（例:ブロック日時を含む一覧等）を将来追加する場合の設計メモとして残すか、不要であれば削除を検討されたい。バグではないため差し戻し必須ではない。
 - 2026-08-13の棚卸しで再確認: 現在も`BlockDto`は自身の定義以外から参照されておらず、状況は変わっていない（**未解消のまま有効な指摘**）。
 
-### 4-3. 【軽微・参考】認証フロー画面のViewModelテスト・Repository実装層テストが未整備（2026-08-12追加、バグではない）
+### 4-3. 【解消済み】認証フロー画面のViewModelテスト・Repository実装層テストが未整備（2026-08-12追加、バグではない／2026-08-13解消）
 
 - ADR-0006対応の検証にあたり不整合・バグは見つからなかったが、2-5-3章で記載のとおり以下2点はテストカバレッジ上の観察事項として記録する。差し戻し必須ではないが、次フェーズでの検討を推奨する。
   1. `OtpVerificationViewModel`をはじめとする認証フロー画面のViewModelに対するユニットテストが未整備（`app/src/test/java/com/golfmatch/app/ui/viewmodel/`配下にテストファイルが存在しない）。UIテスト方針そのものが未確定（0章）であることが背景にあるため、UIテスト方針確定時にArchitectAgent/DeveloperAgent/TesterAgentで対象化を協議されたい
   2. `AuthRepositoryImpl.verifyPhoneOtp()`が`is_new_user`による条件分岐（`ExistingUser`時のみ`sessionManager.updateSession`を呼ぶ）を含むようになり、他Repository実装同様の「ApiServiceへの薄い委譲のみ」という前提（0章）から一部逸脱し始めている。`ApiService`のFake/Mock整備とあわせて、`data/repository/impl`配下のテスト対象化を次フェーズで検討する余地がある
+
+**2026-08-13 解消**: 上記2点に対応した。
+
+- `AuthFlowViewModelTest`（新規16件）: 電話番号入力→OTP認証→プロフィール初期登録の3画面と、起動時遷移先判定（`AppStartViewModel`）を対象化した。ADR-0006の新規/既存ユーザー分岐（`loginSuccess`と`registrationToken`が排他になること）、未入力時にAPIを呼ばないこと、検証失敗時に成功フラグを立てないこと、`AuthSessionManager`の有無による起動時遷移先を検証している
+- `FakeApiService`（`testutil/`、新規）: 全メソッドを「呼ばれたら失敗」とし、テストごとにKotlinの委譲で必要なメソッドのみ差し替える構成にした。モックライブラリは導入せず、既存の`FakeRepositories.kt`と同じ手書きFake方針を踏襲している。想定外のエンドポイントが呼ばれた場合に検知できる
+- `AuthRepositoryImplTest`（新規6件）: `is_new_user`分岐で**既存ユーザー時のみセッションが保存され、新規ユーザー時は保存されない**こと、レスポンス契約違反（`session`/`user`欠落）時に例外を投げ、かつ`AuthSessionManager`を汚さないこと（4-1章で解消したバグの回帰検知）を検証している
+
+**あわせて発見・修正した不備**: 認証フロー3画面のいずれにも、4-4章と同種の**多重操作防止ガードが無かった**（`PhoneNumberInputViewModel.submit()` / `OtpVerificationViewModel.verify()` / `InitialProfileViewModel.submit()`）。他画面のガードパターンに合わせて早期returnを追加し、それぞれ回帰テストを用意した。影響は他画面より大きく、具体的には次のとおり。
+
+- OTP要求の二重送信は**SMSの実費が二重に発生する**（技術設計書12-5章、Twilio従量課金）
+- OTP検証・本登録はいずれも成功時にコード／`registration_token`を消費するため、2回目の呼び出しは失敗し、**画面遷移に成功しているのにエラーメッセージが残る**といった不整合を起こしうる
+
+検証: `./gradlew :app:testDebugUnitTest`は**139件成功、0失敗**（従来117件＋新規22件）。
 
 ### 4-4. 【解消済み】ReportAdminDetailViewModel.save()に多重操作防止ガードが無い（2026-08-12追加、コミット590ebd9検証／2026-08-13解消確認）
 

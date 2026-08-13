@@ -58,6 +58,9 @@ class OtpVerificationViewModel @Inject constructor(
 
     fun verify() {
         val state = _uiState.value
+        // 検証中の二重タップを弾く（他画面のガードパターンと統一）。OTPは検証成功時に消費されるため、
+        // 重複呼び出しの2回目は「コードが無効」エラーになりうる
+        if (state.isVerifying) return
         if (state.otpCode.isBlank()) {
             _uiState.value = state.copy(errorMessage = "確認コードを入力してください")
             return

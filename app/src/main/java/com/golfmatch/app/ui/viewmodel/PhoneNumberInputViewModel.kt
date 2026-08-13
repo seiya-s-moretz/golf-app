@@ -31,6 +31,9 @@ class PhoneNumberInputViewModel @Inject constructor(
     }
 
     fun submit() {
+        // 送信中の二重タップを弾く（他画面のガードパターンと統一）。SMS送信は実費が発生するため、
+        // 重複リクエストは避けたい（技術設計書12-5章）
+        if (_uiState.value.isSubmitting) return
         val phoneNumber = _uiState.value.phoneNumber.trim()
         if (phoneNumber.isEmpty()) {
             _uiState.value = _uiState.value.copy(errorMessage = "電話番号を入力してください")
