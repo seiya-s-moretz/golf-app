@@ -87,7 +87,7 @@ describe("会話の既読化とブロック除外", () => {
     expect(data.unreadCountForUserB ?? 0).toBe(0);
   });
 
-  test("ブロックしても会話と履歴は残る（技術設計書5-2章「履歴閲覧は可能、新規送信のみ拒否」）", async () => {
+  test("ブロックすると会話一覧からも履歴からも見えなくなる（2026-08-13決定、技術設計書5-2章）", async () => {
     const { me, partner } = await connectedPair();
     await sendMessage(partner, me.userId, "こんにちは");
 
@@ -102,19 +102,43 @@ describe("会話の既読化とブロック除外", () => {
       .expect(200);
     expect(
       conversations.body.find((c: { partner: { user_id: string } }) => c.partner.user_id === partner.userId)
-    ).toBeDefined();
+    ).toBeUndefined();
 
-    // 履歴は読めるが、新規送信は拒否される
-    await request(app)
+    // 一覧から消すだけではAPIを直接叩けば読めてしまうため、履歴取得・送信もいずれも拒否する
+    const history = await request(app)
       .get(`/conversations/${partner.userId}/messages`)
       .set(...authHeader(me.accessToken))
-      .expect(200);
-    const send = await request(app)
+      .expect(403);
+    expect(history.body.error.code).toBe("BLOCKED");
+    await request(app)
       .post(`/conversations/${partner.userId}/messages`)
       .set(...authHeader(me.accessToken))
       .send({ content: "送れないはず" })
       .expect(403);
-    expect(send.body.error.code).toBe("BLOCKED");
+  });
+
+  test("【双方向】ブロックされた側からも会話・履歴が見えなくなる", async () => {
+    const { me, partner } = await connectedPair();
+    await sendMessage(me, partner.userId, "こんにちは");
+
+    // 相手が自分をブロックする
+    await request(app)
+      .post(`/users/${me.userId}/block`)
+      .set(...authHeader(partner.accessToken))
+      .expect(204);
+
+    const conversations = await request(app)
+      .get("/conversations")
+      .set(...authHeader(me.accessToken))
+      .expect(200);
+    expect(
+      conversations.body.find((c: { partner: { user_id: string } }) => c.partner.user_id === partner.userId)
+    ).toBeUndefined();
+
+    await request(app)
+      .get(`/conversations/${partner.userId}/messages`)
+      .set(...authHeader(me.accessToken))
+      .expect(403);
   });
 
   test("他人のプロフィールには is_admin を含めない（管理者アカウントの列挙防止）", async () => {

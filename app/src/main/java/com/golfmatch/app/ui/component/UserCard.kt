@@ -131,7 +131,14 @@ private fun UserOverflowMenu(onReportClick: () -> Unit, onBlockUser: () -> Unit)
         AlertDialog(
             onDismissRequest = { showBlockConfirm = false },
             title = { Text("ユーザーをブロックしますか？") },
-            text = { Text("ブロックすると、おすすめユーザー・掲示板への表示や申請・メッセージの送受信ができなくなります。") },
+            // ブロック中は既存の会話・メッセージ履歴も表示されなくなる（技術設計書5-2章、2026-08-13決定）。
+            // 誤操作で会話が見えなくなるため、影響をダイアログに明記してから実行する
+            text = {
+                Text(
+                    "ブロックすると、おすすめユーザー・掲示板への表示や申請・メッセージの送受信ができなくなります。" +
+                        "これまでのやりとりも表示されなくなります（ブロックを解除すると元に戻ります）。"
+                )
+            },
             confirmButton = {
                 TextButton(onClick = {
                     showBlockConfirm = false

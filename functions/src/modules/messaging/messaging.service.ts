@@ -5,7 +5,7 @@ import { assertValidDocumentId } from "../../lib/documentId";
 import { newId } from "../../lib/ids";
 import { applyBeforeCursor, parseLimit } from "../../lib/pagination";
 import { buildPairId, normalizePair } from "../../lib/pairId";
-import { assertNotBlocked } from "../blocks/blocks.service";
+import { assertNotBlocked, excludeBlockedUsers } from "../blocks/blocks.service";
 import { getConnection } from "../connections/connections.service";
 import { toUserResponse, type UserResponse } from "../users/users.service";
 import type { ConnectionDoc, MessageDoc, UserDoc } from "../../types/firestore";
@@ -56,12 +56,12 @@ export async function listConversations(userId: string): Promise<ConversationRes
     db.collection("connections").where("userAId", "==", userId).get(),
     db.collection("connections").where("userBId", "==", userId).get(),
   ]);
-  // ブロック関係にある相手との会話も一覧に残す。技術設計書5-2章のBlock「効果」が
-  // 「既に成立しているConnection・メッセージ履歴は削除しない（ブロック後も履歴閲覧は可能、
-  // 新規送信のみ拒否。証跡保全のため）」と明記しているため、ここで除外すると履歴閲覧の導線が
-  // 失われ設計と矛盾する。「開けるが送れない会話」というUX上の分かりにくさは残るため、
-  // 扱いの見直しは事業判断として`docs/test-plan.md` 4-12章に記録している
-  const connectionDocs = [...asUserA.docs, ...asUserB.docs].map((d) => d.data() as ConnectionDoc);
+  const allConnectionDocs = [...asUserA.docs, ...asUserB.docs].map((d) => d.data() as ConnectionDoc);
+  // ブロック関係にある相手との会話は一覧に出さない（2026-08-13プロダクトオーナー決定、技術設計書5-2章）。
+  // データ自体は証跡として残すが、ブロック中は双方の画面から見えなくする
+  const connectionDocs = await excludeBlockedUsers(allConnectionDocs, userId, (c) =>
+    c.userAId === userId ? c.userBId : c.userAId
+  );
   if (connectionDocs.length === 0) return [];
 
   const partnerIds = connectionDocs.map((c) => (c.userAId === userId ? c.userBId : c.userAId));
@@ -122,6 +122,9 @@ export async function listMessages(
   if (!connection) {
     throw new AppError(403, "FORBIDDEN", "このユーザーとの会話は存在しません");
   }
+  // ブロック中は履歴も表示しない（2026-08-13プロダクトオーナー決定、技術設計書5-2章）。
+  // 会話一覧から除外するだけではAPIを直接叩けば読めてしまうため、ここでも拒否する
+  await assertNotBlocked(requesterUserId, partnerId);
 
   const pairId = buildPairId(requesterUserId, partnerId);
   let query = db.collection("messages").where("pairId", "==", pairId).orderBy("createdAt", "desc");
